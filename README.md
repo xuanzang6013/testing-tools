@@ -12,6 +12,7 @@ connect_flood_client -t -4 -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 1
 ```
 
 And when you want to adjust behaviour, you could:
+
 SERVER: Switch on/off close_all (Stop receiving and close all opened connections)
 ```shell
 kill -s <SIGUSR1> <pid_server>
@@ -35,13 +36,13 @@ Usage: connect_flood_server -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> 
 
 
 Usage: connect_flood_client -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s]
-- '-H'	specify one or more server addresses, separate by ','
-- '-h'	specify one or more client addresses, separate by ','
-- '-p'	specify client port range, separate by '-'
--'-P'	specify server port range, separate by '-'
-- '-t'	TCP mode (default)
-- '-u'	UDP mode
-- '-s'	SCTP mode
+- `-H`	specify one or more server addresses, separate by ','
+- `-h`	specify one or more client addresses, separate by ','
+- `-p`	specify client port range, separate by '-'
+- `-P`	specify server port range, separate by '-'
+- `-t`	TCP mode (default)
+- `-u`	UDP mode
+- `-s`	SCTP mode
 
 
 ## TODO
