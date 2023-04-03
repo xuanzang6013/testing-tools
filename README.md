@@ -27,21 +27,21 @@ kill -s <SIGUSR1> <pid_client>
 
 ## Options
 Usage: connect_flood_server -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> [-t|-u|-s]
- -H	specify one or more server addresses, separate by ','. one addr for each thread
- -p	specify client port range, separate by '-'
- -t	TCP mode (default)
- -u	UDP mode
- -s	SCTP mode
+- '-H'	specify one or more server addresses, separate by ','. one addr for each thread
+- '-p'	specify client port range, separate by '-'
+- '-t'	TCP mode (default)
+- '-u'	UDP mode
+- '-s'	SCTP mode
 
 
- Usage: connect_flood_client -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s]
- -H	specify one or more server addresses, separate by ','
- -h	specify one or more client addresses, separate by ','
- -p	specify client port range, separate by '-'
- -P	specify server port range, separate by '-'
- -t	TCP mode (default)
- -u	UDP mode
- -s	SCTP mode
+Usage: connect_flood_client -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s]
+- '-H'	specify one or more server addresses, separate by ','
+- '-h'	specify one or more client addresses, separate by ','
+- '-p'	specify client port range, separate by '-'
+-'-P'	specify server port range, separate by '-'
+- '-t'	TCP mode (default)
+- '-u'	UDP mode
+- '-s'	SCTP mode
 
 
 ## TODO
