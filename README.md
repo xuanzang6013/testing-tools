@@ -1,8 +1,8 @@
 # Connection flooding tools
 
 ## Overview
-This is a tool for stress/test conntrack in kernel. The program could generate connection flood in ipv4/ipv6 tcp/udp/sctp. It will print out establishing/closing rate in 'cps'(conn per sec).
-It supports multi threads and runtime intereact with SIGUSR1 (kill -12 <pid>)
+This is a tool for stress/test conntrack in kernel. The program could generates connection flood in ipv4/ipv6 tcp/udp/sctp. It will print out establishing/closing rate in 'cps'(conn per sec).
+It supports multi threads and runtime intereact with SIGUSR singals.
 
 ## Usage
 You can specify multiple server/client IPaddress, port range, that are used to generate connections (the 5 tuples).
