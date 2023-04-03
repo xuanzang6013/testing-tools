@@ -103,6 +103,17 @@ pci2name()
         echo $name
 }
 
+exclude_rep()
+{
+	read ifaces
+	for i in $ifaces
+	do
+		ethtool -i $i |grep -q "_rep" || {
+			echo $i
+		}
+	done
+}
+
 mac2name()
 {
 	# ls /sys/class/net/*/address  |while read line;do ls $line; cat $line;done
@@ -124,7 +135,7 @@ get_reps()
 	ls /sys/class/net/*/phys_switch_id | while read line
 	do
 		if grep -q -s $target_id $line; then
-			echo $line | awk -F '/' '{print $5}' | grep '.*vf.*'
+			echo $line | awk -F '/' '{print $5}' | grep -v "$1" # Exclude PF. They are same phys_switch_id
 		fi
 	done
 }
@@ -138,8 +149,8 @@ create_sriov()
 	pf0_pci_id=$(echo $pcis | awk '{print $1}')
 	pf1_pci_id=$(echo $pcis | awk '{print $2}')
 
-	pf0_name=$(pci2name $pf0_pci_id)
-	pf1_name=$(pci2name $pf1_pci_id)
+	pf0_name=$(pci2name $pf0_pci_id | exclude_rep)
+	pf1_name=$(pci2name $pf1_pci_id | exclude_rep)
 
 	echo $pf0_name
 	echo $pf1_name
