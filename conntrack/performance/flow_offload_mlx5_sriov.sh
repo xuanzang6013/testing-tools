@@ -53,8 +53,6 @@ destory_topo()
 	cleanup
 	ip addr flush $pf0_name
 	ip addr flush $pf1_name
-	ip link set $pf0_name down
-	ip link set $pf1_name down
 	sysctl -q net.ipv4.conf.all.forwarding=0
 	sysctl -q net.ipv6.conf.all.forwarding=0
 	ip netns del $S 2> /dev/null
@@ -73,6 +71,9 @@ destory_topo()
 	sysctl -q fs.file-max=${backup_file_max}
 	sysctl -q fs.nr_open=${backup_nr_open}
 	rmmodule nf_conntrack || lsmod nf_conntrack
+
+	ip link set $pf0_name down
+	ip link set $pf1_name down
 	echo ""
 }
 
