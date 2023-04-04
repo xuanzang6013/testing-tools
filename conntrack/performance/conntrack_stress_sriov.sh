@@ -51,6 +51,10 @@ destory_topo()
 {
 	echo "------------destory_topo--------------"
 	cleanup
+	ip addr flush $pf0_name
+	ip addr flush $pf1_name
+	ip link set $pf0_name down
+	ip link set $pf1_name down
 	sysctl -q net.ipv4.conf.all.forwarding=0
 	sysctl -q net.ipv6.conf.all.forwarding=0
 	ip netns del $S 2> /dev/null
@@ -72,7 +76,7 @@ destory_topo()
 	echo ""
 }
 
-if [[ $keep_topo == 1 ]]
+if [[ $keep_topo != 1 ]]
 then
 	trap destory_topo EXIT
 fi
@@ -119,6 +123,17 @@ exclude_rep()
 	done
 }
 
+select_rep()
+{
+	read ifaces
+	for i in $ifaces
+	do
+		ethtool -i $i |grep -q "_rep" && {
+			echo $i
+		}
+	done
+}
+
 mac2name()
 {
 	# ls /sys/class/net/*/address  |while read line;do ls $line; cat $line;done
@@ -140,7 +155,7 @@ get_reps()
 	ls /sys/class/net/*/phys_switch_id | while read line
 	do
 		if grep -q -s $target_id $line; then
-			echo $line | awk -F '/' '{print $5}' | grep -v "$1" # Exclude PF. They are same phys_switch_id
+			echo $line | awk -F '/' '{print $5}' | select_rep
 		fi
 	done
 }
@@ -149,18 +164,18 @@ create_sriov()
 {
 	# mlx SRIOV setting
 	pcis=$(parse_netqe_nic_info.sh -d mlx5_core --match $(hostname) --raw |awk '{print $5}')
-	echo $pcis
 
 	pf0_pci_id=$(echo $pcis | awk '{print $1}')
 	pf1_pci_id=$(echo $pcis | awk '{print $2}')
 
 	pf0_name=$(pci2name $pf0_pci_id | exclude_rep)
 	pf1_name=$(pci2name $pf1_pci_id | exclude_rep)
-
-	echo $pf0_name
-	echo $pf1_name
+	echo "PF0 $pf0_name"
+	echo "PF1 $pf1_name"
 
 	# Only use one PF
+	# If no traffic out, even no need to set PF up
+	ip link set $pf0_name up
 	echo 2 > /sys/class/net/$pf0_name/device/sriov_numvfs
 
 	vf0_pci_id=$(readlink /sys/class/net/$pf0_name/device/virtfn0 | xargs -l basename)
@@ -193,13 +208,13 @@ create_topo()
 	c_f=$vf1_name
 	f_c=$(get_reps $pf0_name| sed -n '2p')
 
+	echo "Rep0 $f_s"
+	echo "Rep1 $f_c"
+	echo "VF0 $s_f"
+	echo "VF1 $c_f"
+
 	nmcli device set $f_s managed no
 	nmcli device set $f_c managed no
-
-#	echo $f_s
-#	echo $f_c
-#	echo $c_f
-#	echo $s_f
 
 	ip netns add $S
 	ip netns add $C
