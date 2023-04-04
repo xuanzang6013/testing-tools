@@ -27,7 +27,7 @@ usage(){
 	exit 1
 }
 
-while getopts "46tus" o
+while getopts "46tusk" o
 do
 	case $o in
 		4) L3=ipv4;;
@@ -35,6 +35,7 @@ do
 		t) L4=tcp;;
 		u) L4=udp;;
 		s) L4=sctp; modprobe sctp || exit $ksft_skip;;
+		k) keep_topo=1;;
 		*) usage;;
 	esac
 done
@@ -70,7 +71,11 @@ destory_topo()
 	rmmodule nf_conntrack || lsmod nf_conntrack
 	echo ""
 }
-trap destory_topo EXIT
+
+if [[ $keep_topo == 1 ]]
+then
+	trap destory_topo EXIT
+fi
 
 cleanup()
 {
@@ -187,6 +192,9 @@ create_topo()
 	f_s=$(get_reps $pf0_name| sed -n '1p')
 	c_f=$vf1_name
 	f_c=$(get_reps $pf0_name| sed -n '2p')
+
+	nmcli device set $f_s managed no
+	nmcli device set $f_c managed no
 
 #	echo $f_s
 #	echo $f_c
@@ -322,7 +330,11 @@ table inet filter {
 EOF
 
 # The ruleset should be set on Representer but not on VF in namespace!
-#	nft -f rules
+	nft -f rules || {
+		echo "nft hw flow offload rule added fail"
+		exit 1
+	}
+
 	modprobe nf_conntrack enable_hooks=1
 	if [ $? != 0 ]
 	then
