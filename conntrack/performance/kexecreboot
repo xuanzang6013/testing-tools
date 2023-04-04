@@ -1,0 +1,119 @@
+#!/bin/bash
+#
+# Script to kexec reboot into a selected kernel.
+# It will load it using kexec and reboot, skipping machine POST and all.
+# Similar to what a crash would trigger.
+# Useful if kernel may not boot (as the next power cycle will boot the
+# default kernel) or you want it to reboot faster.
+#
+# Tested only on RHEL7.2 and Fedora 23, but should work whenever you
+# have grubby and kexec-tools installed.
+#
+# Depends on: grubby kexec-tools
+#
+# Authors: Marcelo Ricardo Leitner <mleitner@redhat.com>
+#
+
+
+bright="\x1b[1m"
+normal="\x1b[0m"
+
+err()
+{
+	echo "$@" > /dev/stderr
+}
+
+find_vmlinuz_entry()
+{
+	entry="$1"
+	index=$(grubby --info="$entry" 2> /dev/null | grep index=)
+	if [ $? -ne 0 -o -z "$index" ]; then
+		err "Entry $entry not found."
+		return 255
+	fi
+	eval "$index"
+	return $index
+}
+
+select_vmlinuz_entry()
+{
+	default=$(grubby --default-index 2> /dev/null)
+	default=${default:-0}
+	i=0
+	max=$(grubby --info=ALL | grep -c index=)
+	for i in $(seq 0 $((max-1))); do
+		eval "$(grubby --info=$i)"
+		if [ $i -eq $default ]; then
+			echo -n '*'
+		else
+			echo -n ' '
+		fi
+		echo -e "${i}. $bright$kernel$normal $args"
+	done
+	read entry
+	if ! [[ "$entry" =~ ^[0-9]+$ ]]; then
+		err "Invalid entry: $entry"
+		return 255
+	fi
+	if [ $entry -lt 0 -o $entry -ge $max ]; then
+		err "Entry out of bounds: $entry"
+		return 255
+	fi
+	return $entry
+}
+
+entry="$1"
+
+if [ -n "$entry" ]; then
+	if [ -f "$entry" ]; then
+		# vmlinuz specified.
+
+		find_vmlinuz_entry "$entry"
+		entry_n=$?
+		if [ $entry_n -eq 255 ]; then
+			exit 1
+		fi
+		entry=$entry_n
+	elif [[ "$entry" =~ ^[0-9]+$ ]]; then
+		# Entry # specified.
+		max_entries=$(grubby --info=ALL | grep -c index=)
+		if [ $entry -lt 0 -o $entry -ge $max_entries ]; then
+			err "Entry $entry out of bounds."
+			exit 1
+		fi
+	elif [[ "$entry" == "default" ]]; then
+		entry=$(grubby --info=DEFAULT | sed -n 's/^index=//p')
+	else
+		err "Unknown parameter, '$entry'. Does file exist?"
+		exit 1
+	fi
+else
+	echo "Please select which entry:"
+	select_vmlinuz_entry "$entry"
+	entry_n=$?
+	if [ $entry_n -eq 255 ]; then
+		exit 1
+	fi
+	entry=$entry_n
+fi
+
+
+grubby --info="$entry" | {
+	IFS==
+	while read field value
+	do
+		case $value in
+		\"*\")
+			eval "$field=$value" ;;
+		*)
+			eval "$field=\$value" ;;
+		esac
+	done
+	unset IFS
+
+	set -x
+	kexec -l --initrd=$initrd --append="root=$root $args" -- "$kernel"
+}
+
+echo "Kernel loaded, you may actually reboot now."
+
