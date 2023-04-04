@@ -57,10 +57,6 @@ destory_topo()
 	sysctl -q net.ipv6.conf.all.forwarding=0
 	ip netns del $S 2> /dev/null
 	ip netns del $C 2> /dev/null
-	until ip link show $pf1_name 2> /dev/null
-	do
-		sleep 0.5
-	done
 
 	echo 0 > /sys/class/net/$pf0_name/device/sriov_numvfs
 	echo 0 > /sys/class/net/$pf1_name/device/sriov_numvfs
