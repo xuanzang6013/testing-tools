@@ -10,7 +10,7 @@ ksft_skip=4
 sfx=$(mktemp -u "XXXXXXXX")
 
 l3box=(ipv4 ipv6)
-l4box=(tcp udp sctp)
+l4box=(tcp udp)
 
 L3=${l3box[RANDOM%2]}
 L4=${l4box[RANDOM%3]}
@@ -80,6 +80,7 @@ fi
 
 cleanup()
 {
+	jobs -p | xargs -x kill
 	ip netns pids $S 2> /dev/null| xargs kill >/dev/null 2>&1
 	ip netns pids $C 2> /dev/null| xargs kill >/dev/null 2>&1
 	ip -net $S addr flush $s_f
@@ -197,8 +198,10 @@ create_topo()
 
 	create_sriov
 
-	S="S-$sfx" # Server
-	C="C-$sfx" # Client
+#	S="S-$sfx" # Server
+#	C="C-$sfx" # Client
+	S=S
+	C=C
 
 	s_f=$vf0_name
 	f_s=$(get_reps $pf0_name| sed -n '1p')
@@ -463,7 +466,6 @@ conntrack_flowtable()
 
 	add_ipaddrs $threadsNum
 
-	#enable_conntrack or enable_nat
 	enable_flowtable
 
 	start_iperf3 1000
@@ -501,14 +503,31 @@ conntrack_flowtable()
 	cleanup
 }
 
+flowtable_timeout()
+{
+	enable_flowtable
+
+	sysctl net.netfilter.nf_flowtable_tcp_timeout=10
+	sysctl net.netfilter.nf_flowtable_udp_timeout=10
+
+	echo > pipefile
+	ip netns exec S ncat -ul 10.1.0.100 9999 &
+	echo "tail -f pipefile | ncat -u 10.1.0.100 9999 &" | ip netns exec C bash
+
+	# send packet 5s interval
+	i=1;while ((i++));do echo $i >> pipefile; sleep 5;done &
+	while true;do cat /proc/net/nf_conntrack |grep "10.1.0.100"; sleep 1|grep "10.1.0.100";done &
+	sleep 20
+
+	cleanup
+}
+
 run_all()
 {
+	# testing offload timeout
+	flowtable_timeout
+
 	# stress flow offload
-	if [ x"$L4" == x"sctp" ]
-	then
-		echo "flowoffload doesn't support sctp"
-		exit 4;
-	fi
 	conntrack_flowtable
 }
 
