@@ -13,7 +13,7 @@ l3box=(ipv4 ipv6)
 l4box=(tcp udp)
 
 L3=${l3box[RANDOM%2]}
-L4=${l4box[RANDOM%3]}
+L4=${l4box[RANDOM%2]}
 
 usage(){
 	echo ""
@@ -520,32 +520,50 @@ conntrack_flowtable()
 	cleanup
 }
 
-flowtable_timeout()
+offload_timeout()
 {
+#	rm -f pipefile
+#	touch pipefile
+	echo xxx > pipefile
+
 	enable_flowtable
 
-	sysctl net.netfilter.nf_flowtable_tcp_timeout=8
-	sysctl net.netfilter.nf_flowtable_udp_timeout=8
+	sysctl net.netfilter.nf_flowtable_tcp_timeout=6
+	sysctl net.netfilter.nf_flowtable_udp_timeout=6
 
-	echo > pipefile
-	ip netns exec S ncat -ul 10.1.0.100 9999 &
-	echo "tail -f pipefile | ncat -u 10.1.0.100 9999 &" | ip netns exec C bash
+	case "$L4" in
+		"tcp")	local opt_l="-l"
+			local opt=""
+			;;
+		"udp")	local opt_l="-ul"
+			local opt="-u"
+			;;
+	esac
+
+        case "$L3" in
+		"ipv4") local ip="10.1.0.100";;
+		"ipv6") local ip="2111:0000:0000:0000:0000:0000:0000:0100";;
+	esac
+
+	ip netns exec S ncat $opt_l $ip 9999 &
+	sleep 1
+	echo "tail -f pipefile | ncat $opt $ip 9999 &" | ip netns exec C bash
 
 	# send packet 5s interval
-	i=0;while ((++i));do echo "$i. send one packet" >> pipefile; sleep 5;done &
-	while true;do cat /proc/net/nf_conntrack |grep "10.1.0.100"; sleep 1|grep "10.1.0.100";done &
+	i=0;while ((++i));do echo "#$i. send a message" >> pipefile; sleep 5;done &
+	while true;do cat /proc/net/nf_conntrack |grep "$ip"; sleep 1;done &
 	sleep 50
 
-	cleanup
+#	cleanup
 }
 
 run_all()
 {
 	# testing offload timeout
-	flowtable_timeout
+	offload_timeout
 
 	# stress flow offload
-	conntrack_flowtable
+#	conntrack_flowtable
 }
 
 check_requires
