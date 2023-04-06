@@ -40,12 +40,13 @@ do
 	esac
 done
 
+uname -a
+free -h
+
 echo "*************************************************"
 echo " L3proto: $L3, L4proto: $L4"
 echo "*************************************************"
 
-uname -a
-free -h
 
 destory_topo()
 {
@@ -80,7 +81,7 @@ fi
 
 cleanup()
 {
-	jobs -p | xargs -x kill
+	jobs -p | xargs -x kill > /dev/null 2>&1
 	ip netns pids $S 2> /dev/null| xargs kill >/dev/null 2>&1
 	ip netns pids $C 2> /dev/null| xargs kill >/dev/null 2>&1
 	ip -net $S addr flush $s_f
@@ -108,6 +109,12 @@ pci2name()
 	local pci_bus="${1%:*}"   # 0000:ca
 	local name=$(ls /sys/class/pci_bus/$pci_bus/device/$pci_id/net | grep -v ".*vf.*")
         echo $name
+}
+
+name2pci()
+{
+	local ifname="$1"
+	readlink /sys/class/net/$ifname/device | xargs -x basename
 }
 
 exclude_rep()
@@ -161,15 +168,25 @@ get_reps()
 create_sriov()
 {
 	# mlx SRIOV setting
-	pcis=$(parse_netqe_nic_info.sh -d mlx5_core --match $(hostname) --raw |awk '{print $5}')
+	if which parse_netqe_nic_info.sh
+	then
+		#parse_netqe_nic_info.sh is a private script used in our lab
+		pcis=$(parse_netqe_nic_info.sh -d mlx5_core --match $(hostname) --raw |awk '{print $5}')
+		pf0_pci_id=$(echo $pcis | awk '{print $1}')
+		pf1_pci_id=$(echo $pcis | awk '{print $2}')
 
-	pf0_pci_id=$(echo $pcis | awk '{print $1}')
-	pf1_pci_id=$(echo $pcis | awk '{print $2}')
+		pf0_name=$(pci2name $pf0_pci_id | exclude_rep)
+		pf1_name=$(pci2name $pf1_pci_id | exclude_rep)
+	else
+		ip a
+		echo "Specify a PF interface name by hand:"
+		read -p "pf0_name=" pf0_name
+		pf0_pci_id=$(name2pci $pf0_name)
+	fi
 
-	pf0_name=$(pci2name $pf0_pci_id | exclude_rep)
-	pf1_name=$(pci2name $pf1_pci_id | exclude_rep)
-	echo "PF0 $pf0_name"
-	echo "PF1 $pf1_name"
+	echo ""
+	echo "PF0 $pf0_name $pf0_pci_id is used"
+	echo "PF1 $pf1_name $pf1_pci_id unused"
 
 	# Only use one PF
 	# If no traffic out, even no need to set PF up
@@ -507,17 +524,17 @@ flowtable_timeout()
 {
 	enable_flowtable
 
-	sysctl net.netfilter.nf_flowtable_tcp_timeout=10
-	sysctl net.netfilter.nf_flowtable_udp_timeout=10
+	sysctl net.netfilter.nf_flowtable_tcp_timeout=8
+	sysctl net.netfilter.nf_flowtable_udp_timeout=8
 
 	echo > pipefile
 	ip netns exec S ncat -ul 10.1.0.100 9999 &
 	echo "tail -f pipefile | ncat -u 10.1.0.100 9999 &" | ip netns exec C bash
 
 	# send packet 5s interval
-	i=1;while ((i++));do echo $i >> pipefile; sleep 5;done &
+	i=0;while ((++i));do echo "$i. send one packet" >> pipefile; sleep 5;done &
 	while true;do cat /proc/net/nf_conntrack |grep "10.1.0.100"; sleep 1|grep "10.1.0.100";done &
-	sleep 20
+	sleep 50
 
 	cleanup
 }
