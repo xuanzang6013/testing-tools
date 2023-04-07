@@ -1,4 +1,4 @@
-# Connection flooding tools
+# Connections flooding tool
 
 ## Overview
 This is a tool for stress/test conntrack in kernel. The program could generates connection flood in ipv4/ipv6 tcp/udp/sctp. It will print out establishing/closing rate in 'cps'(conn per sec).
