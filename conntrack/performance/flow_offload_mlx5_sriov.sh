@@ -44,7 +44,7 @@ uname -a
 free -h
 
 echo "*************************************************"
-echo " L3proto: $L3, L4proto: $L4"
+echo "  $L3,  $L4"
 echo "*************************************************"
 
 
@@ -128,7 +128,7 @@ exclude_rep()
 	done
 }
 
-select_rep()
+find_rep()
 {
 	read ifaces
 	for i in $ifaces
@@ -160,7 +160,7 @@ get_reps()
 	ls /sys/class/net/*/phys_switch_id | while read line
 	do
 		if grep -q -s $target_id $line; then
-			echo $line | awk -F '/' '{print $5}' | select_rep
+			echo $line | awk -F '/' '{print $5}' | find_rep
 		fi
 	done
 }
@@ -278,13 +278,13 @@ create_topo()
 	sysctl -q net.ipv6.conf.all.forwarding=1
 
 	echo "-----------------------------------"
-	ip addr add 2111:f::0/16 dev $f_s nodad
-	ip addr add 2112:f::0/16 dev $f_c nodad
+	ip addr add 2111::ffff/64 dev $f_s nodad
+	ip addr add 2112::ffff/64 dev $f_c nodad
 
-	ip -net $S addr add 2111::100/16 dev $s_f nodad
-	ip -net $C addr add 2112::100/16 dev $c_f nodad
-	ip -net $S route add default via 2111:f::0 dev $s_f
-	ip -net $C route add default via 2112:f::0 dev $c_f
+	ip -net $S addr add 2111::100/64 dev $s_f nodad
+	ip -net $C addr add 2112::100/64 dev $c_f nodad
+	ip -net $S route add default via 2111::ffff dev $s_f
+	ip -net $C route add default via 2112::ffff dev $c_f
 
 	local retry=5
 	until ip netns exec $C ping -6 2111::100 -c 3
@@ -522,39 +522,45 @@ conntrack_flowtable()
 
 offload_timeout()
 {
-#	rm -f pipefile
-#	touch pipefile
-	echo xxx > pipefile
-
 	enable_flowtable
 
 	sysctl net.netfilter.nf_flowtable_tcp_timeout=6
 	sysctl net.netfilter.nf_flowtable_udp_timeout=6
 
 	case "$L4" in
-		"tcp")	local opt_l="-l"
-			local opt=""
+		"tcp")	local ser_proto="TCP-LISTEN"
+			local cli_proto="TCP"
 			;;
-		"udp")	local opt_l="-ul"
-			local opt="-u"
+		"udp")	local ser_proto="UDP-LISTEN"
+			local cli_proto="UDP"
 			;;
 	esac
 
         case "$L3" in
-		"ipv4") local ip="10.1.0.100";;
-		"ipv6") local ip="2111:0000:0000:0000:0000:0000:0000:0100";;
+		"ipv4") local ip="10.1.0.100"
+			local socat_ip="10.1.0.100"
+			export SOCAT_DEFAULT_LISTEN_IP=4
+			;;
+		"ipv6") local ip="2111:0000:0000:0000:0000:0000:0000:0100"
+			local socat_ip="[2111:0000:0000:0000:0000:0000:0000:0100]"
+			export SOCAT_DEFAULT_LISTEN_IP=6
+			;;
 	esac
 
-	ip netns exec S ncat $opt_l $ip 9999 &
-	sleep 1
-	echo "tail -f pipefile | ncat $opt $ip 9999 &" | ip netns exec C bash
+	> pipefile
+
+	set -x
+	ip netns exec S socat $ser_proto:9999 STDOUT,ignoreeof & sleep 2
+	echo "tail -f pipefile | socat STDIN $cli_proto:$socat_ip:9999 &" | ip netns exec C bash
+	set +x
+
 
 	# send packet 5s interval
 	i=0;while ((++i));do echo "#$i. send a message" >> pipefile; sleep 5;done &
 	while true;do cat /proc/net/nf_conntrack |grep "$ip"; sleep 1;done &
 	sleep 50
 
-#	cleanup
+	cleanup
 }
 
 run_all()
@@ -563,7 +569,7 @@ run_all()
 	offload_timeout
 
 	# stress flow offload
-#	conntrack_flowtable
+	conntrack_flowtable
 }
 
 check_requires
