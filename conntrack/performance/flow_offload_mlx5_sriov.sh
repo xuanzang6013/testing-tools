@@ -44,7 +44,7 @@ uname -a
 free -h
 
 echo "*************************************************"
-echo "  $L3,  $L4"
+echo "  $L3   $L4"
 echo "*************************************************"
 
 
@@ -230,8 +230,16 @@ create_topo()
 	echo "VF0 $s_f"
 	echo "VF1 $c_f"
 
+	# --This piece of code in case fe80:: not generated----
 	nmcli device set $f_s managed no
 	nmcli device set $f_c managed no
+
+	ip link set $f_s addrgenmode eui64
+	ip link set $f_c addrgenmode eui64
+
+	ip link set $f_s down
+	ip link set $f_c down
+	#--------------------------------
 
 	ip netns add $S
 	ip netns add $C
@@ -264,7 +272,7 @@ create_topo()
 	ip -net $S route add default via 10.1.255.254
 	ip -net $C route add default via 10.2.255.254
 
-	local retry=5
+	local retry=3
 	until ip netns exec $C ping 10.1.0.100 -c 3
 	do
 		if ! ((retry--))
@@ -286,7 +294,7 @@ create_topo()
 	ip -net $S route add default via 2111::ffff dev $s_f
 	ip -net $C route add default via 2112::ffff dev $c_f
 
-	local retry=5
+	local retry=3
 	until ip netns exec $C ping -6 2111::100 -c 3
 	do
 		if ! ((retry--))
