@@ -57,9 +57,9 @@ It configs HW OFFLOAD on INVIDA network card[1] with nftables See:[2],[3]
 
 Also test timeout setting in HW OFFLOAD. 
 
-[1] https://blogs.nvidia.com/blog/2020/05/20/whats-a-dpu-data-processing-unit/
-[2] https://wiki.nftables.org/wiki-nftables/index.php/Flowtables
-[3] https://docs.kernel.org/networking/nf_flowtable.html
+- [1] https://blogs.nvidia.com/blog/2020/05/20/whats-a-dpu-data-processing-unit/
+- [2] https://wiki.nftables.org/wiki-nftables/index.php/Flowtables
+- [3] https://docs.kernel.org/networking/nf_flowtable.html
 
 # conntrack_stress.sh
 ## Overview
