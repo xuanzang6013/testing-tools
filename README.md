@@ -31,6 +31,7 @@ kill -s <SIGUSR1> <pid_client>
 ```
 Usage: connect_flood_server -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax>  [-t|-u|-s]
 ```
+The number of serIPs, The number of threads are used
 - `-H` : specify one or more server addresses, separate by ','. Will create one thread for each seraddr.
 - `-p` : specify client port range, separate by '-'
 - `-t` : TCP mode (default)
@@ -40,6 +41,7 @@ Usage: connect_flood_server -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> 
 ```
 Usage: connect_flood_client -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s]
 ```
+The number of serIPs, The number of threads are used
 - `-H` : specify one or more server addresses, separate by ','. Will create one thread for each seraddr.
 - `-h` : specify one or more client addresses, separate by ','
 - `-p` : specify client port range, separate by '-'
