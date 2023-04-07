@@ -7,7 +7,7 @@ It supports multi threads and runtime intereact with SIGUSR singals.
 
 ## Usage
 You can specify multiple server/client IPaddress, port range, that are used to generate connections (the 5 tuples).
-The number of serIPs, The number of threads are used
+- The number of serIPs, The number of threads are used
 ```shell
 connect_flood_server -t -4 -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 &
 connect_flood_client -t -4 -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 10.0.2.101,10.0.2.102,10.0.2.103 -p 50001-60000
