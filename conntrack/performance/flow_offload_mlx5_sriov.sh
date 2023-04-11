@@ -171,6 +171,9 @@ create_sriov()
 	if which parse_netqe_nic_info.sh
 	then
 		#parse_netqe_nic_info.sh is a private script used in our lab
+		[ -e /tmp/nic_info ] || {
+			unset NIC_INFO
+		}
 		pcis=$(parse_netqe_nic_info.sh -d mlx5_core --match $(hostname) --raw |awk '{print $5}')
 		pf0_pci_id=$(echo $pcis | awk '{print $1}')
 		pf1_pci_id=$(echo $pcis | awk '{print $2}')
