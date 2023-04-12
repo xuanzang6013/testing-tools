@@ -201,7 +201,7 @@ void *handle_peer_close(void *p)
 					exit(1);
 				}
 				close(conn_evlist[i].data.fd);
-				cnt_closed[i]++;
+				cnt_closed[thp->thd_seq]++;
 			} else {
 				if (conn_evlist[i].events & (EPOLLHUP | EPOLLERR)) {
 					perror("epoll returned EPOLLHUP | EPOLLERR");
@@ -368,7 +368,7 @@ void *handle_peer_new(void *p)
 				break;
 			}
 			close(fd);
-			cnt_closed[i]++;
+			cnt_closed[thp->thd_seq]++;
 		}
 	}
 
