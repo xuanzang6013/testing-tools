@@ -48,9 +48,9 @@ echo "  $L3   $L4"
 echo "*************************************************"
 
 
-destory_topo()
+destroy_topo()
 {
-	echo "------------destory_topo--------------"
+	echo "------------destroy_topo--------------"
 	cleanup
 	ip addr flush $pf0_name
 	ip addr flush $pf1_name
@@ -76,7 +76,7 @@ destory_topo()
 
 if [[ $keep_topo != 1 ]]
 then
-	trap destory_topo EXIT
+	trap destroy_topo EXIT
 fi
 
 cleanup()
