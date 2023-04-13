@@ -11,6 +11,9 @@ You can specify multiple server/client IPaddress, port range, that are used to g
 ```shell
 connect_flood_server -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 &
 connect_flood_client -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 10.0.2.101,10.0.2.102,10.0.2.103 -p 50001-60000
+or
+connect_flood_server -t -H 2001::101,2001::102 -P 1001-1500 &
+connect_flood_client -t -H 2001::101,2001::102 -P 1001-1500 -h 2002::101,2002::102 -p 50001-60000
 ```
 
 And when you want to adjust behaviour, you could:
@@ -69,5 +72,6 @@ Also test timeout setting in HW OFFLOAD.
 This is a script focus on stress conntrack in linux kernel. and measure conntrack performance.
 How conntrack will affect on connection establish rate?
 Let's test.
+
 
 # Choose RedHat!
