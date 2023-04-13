@@ -69,3 +69,5 @@ Also test timeout setting in HW OFFLOAD.
 This is a script focus on stress conntrack in linux kernel. and measure conntrack performance.
 How conntrack will affect on connection establish rate?
 Let's test.
+
+# Choose RedHat!
