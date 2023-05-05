@@ -199,13 +199,13 @@ create_sriov()
 	vf0_pci_id=$(readlink /sys/class/net/$pf0_name/device/virtfn0 | xargs -l basename)
 	vf1_pci_id=$(readlink /sys/class/net/$pf0_name/device/virtfn1 | xargs -l basename)
 
-	echo $vf0_pci_id > /sys/bus/pci/drivers/mlx5_core/unbind
-	echo $vf1_pci_id > /sys/bus/pci/drivers/mlx5_core/unbind
+#	echo $vf0_pci_id > /sys/bus/pci/drivers/mlx5_core/unbind
+#	echo $vf1_pci_id > /sys/bus/pci/drivers/mlx5_core/unbind
 
 	devlink dev eswitch set pci/$pf0_pci_id mode switchdev || exit 2
 
-	echo $vf0_pci_id > /sys/bus/pci/drivers/mlx5_core/bind
-	echo $vf1_pci_id > /sys/bus/pci/drivers/mlx5_core/bind
+#	echo $vf0_pci_id > /sys/bus/pci/drivers/mlx5_core/bind
+#	echo $vf1_pci_id > /sys/bus/pci/drivers/mlx5_core/bind
 
 	vf0_name=$(ls /sys/class/net/$pf0_name/device/virtfn0/net)
 	vf1_name=$(ls /sys/class/net/$pf0_name/device/virtfn1/net)
