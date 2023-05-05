@@ -238,7 +238,9 @@ void *worker(void *addrstr)
 								perror("epoll_ctl DEL");
 								exit(1);
 							}
-							close(evlist[i].data.fd);
+							if (close(evlist[i].data.fd) == -1) {
+								perror("client handle close");
+							}
 						} else {
 							if (evlist[i].events & (EPOLLHUP | EPOLLERR)) {
 								dprintf(2, "epoll returned EPOLLHUP | EPOLLERR\n");
@@ -249,7 +251,9 @@ void *worker(void *addrstr)
 				}
 
 				if (close_soon) {
-					close(sockfd);
+					if (close(sockfd) == -1) {
+						perror("close_soon");
+					}
 					continue;
 				}
 			}

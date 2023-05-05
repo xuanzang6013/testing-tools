@@ -200,7 +200,9 @@ void *handle_peer_close(void *p)
 					perror("epoll_ctl DEL");
 					exit(1);
 				}
-				close(conn_evlist[i].data.fd);
+				if (close(conn_evlist[i].data.fd) == -1) {
+					perror("handle_peer_close");
+				}
 				cnt_closed[thp->thd_seq]++;
 			} else {
 				if (conn_evlist[i].events & (EPOLLHUP | EPOLLERR)) {
@@ -367,7 +369,9 @@ void *handle_peer_new(void *p)
 				//dprintf(2,"dequeue fail, empty\n");
 				break;
 			}
-			close(fd);
+			if (close(fd) == -1) {
+				perror("server close");
+			}
 			cnt_closed[thp->thd_seq]++;
 		}
 	}
