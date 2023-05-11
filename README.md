@@ -67,6 +67,12 @@ Also test timeout setting in HW OFFLOAD.
 - [2] https://wiki.nftables.org/wiki-nftables/index.php/Flowtables
 - [3] https://docs.kernel.org/networking/nf_flowtable.html
 
+NVIDIA mlx5:
+- https://enterprise-support.nvidia.com/s/article/Configuring-VF-LAG-using-TC
+Intel E810:
+- https://cdrdv2-public.intel.com/645272/645272_E810%20eSwitch%20switchdev%20Mode%20Config%20Guide_rev1_1.pdf
+
+
 # conntrack_stress.sh
 ## Overview
 This is a script focus on stress conntrack in linux kernel. and measure conntrack performance.
