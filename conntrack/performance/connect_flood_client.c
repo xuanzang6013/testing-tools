@@ -271,6 +271,7 @@ void usage(char *argv[])
 	printf(" -t	TCP mode (default)\n");
 	printf(" -u	UDP mode\n");
 	printf(" -s	SCTP mode\n\n");
+	printf(" -c	close_soon: close connect soon, right after established\n\n");
 	printf("Example:\n");
 	printf("%s -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 10.0.2.101,10.0.2.102 -p 50001-60000\n", argv[0]);
 	printf("%s -t -H 2000::100,2000::101 -P 1001-1500 -h 2001::100,2001::101 -p 50001-60000\n", argv[0]);
@@ -329,6 +330,10 @@ int main(int argc, char *argv[])
 			sock_type = SOCK_STREAM;
 			connect_func = connect;
 			sock_protocol = IPPROTO_SCTP;
+			break;
+		case 'c':
+			close_soon = 1;
+			printf("\e[0;34mCLIENT: close soon is on\e[0m\n");
 			break;
 		default:
 			dprintf(2, "Invalid parameter\n");
