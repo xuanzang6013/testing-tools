@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 	int opt, i, sysfd;
 	char nr_open[100] = {0};
 	// Capitals config Local ,lowercase config remote
-	while ((opt = getopt(argc, argv, "H:h:P:p:tus")) != -1) {
+	while ((opt = getopt(argc, argv, "H:h:P:p:tusc")) != -1) {
 		switch (opt) {
 		case 'H':
 			ser_addrs = optarg;
