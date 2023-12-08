@@ -1,0 +1,54 @@
+#! /bin/bash
+export RSYNC_PASSWORD="QwAo2U6GRxyNPKiZaOCx"
+
+until [ -z $1 ]; do
+    case "$1" in
+    -l|--login)    user="$2"; shift 2;; 
+    -p|--rpath)    rpath="$2";rpath_flag=1; shift 2;; 
+    -*) shift;;
+    *) break;;
+    esac
+done
+
+user=${user:-root}
+lpaths="$(pwd)/"
+hosts="$*"
+
+if [[ -z $hosts && ! -e /tmp/myrsync.cfg ]];then
+    echo "hosts in \$1 can't empty"
+    exit 1
+elif [[ ! -z $hosts ]]
+then
+    echo $hosts > /tmp/myrsync.cfg
+else
+    hosts=`cat /tmp/myrsync.cfg`
+fi
+
+
+for host in $hosts;do
+    for lpath in $lpaths;do
+        if [ "$rpath_flag" == "1" ];then 
+            rpath=$rpath/`basename $lpath`/                                                                                                                                                                                                                                                                                  
+        else
+            rpath=$lpath
+        fi
+        echo rpath= $rpath
+        echo host= $host
+        echo user= $user
+	cat ~/.ssh/id_rsa.pub | ssh $user@$host "cat - >> ~/.ssh/authorized_keys"
+
+        for t in {1..3};do
+            #rsync -h --human-readable --progress -r -e ssh $lpath $user@$host:$rpath
+            rsync -r -e ssh $lpath $user@$host:$rpath >/dev/null 2>&1 && break
+            ret=$?
+            if [ $ret == 12 ];then
+		echo "Remote: yum -y install rsync"
+                ssh $user@$host "yum -y install rsync"
+            fi
+            if [ $ret == 11 ];then
+		echo "Remote: mkdir -p $rpath"
+                echo "mkdir -p $rpath" | ssh $user@$host bash
+            fi
+        done
+    done
+done
