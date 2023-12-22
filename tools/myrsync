@@ -1,5 +1,6 @@
 #! /bin/bash
-export RSYNC_PASSWORD="QwAo2U6GRxyNPKiZaOCx"
+# Sync current path to remote machine. Create path if not exist in remote.
+# Usage: myrsync <hostname1/ip1> <hostname2/ip2> ...
 
 until [ -z $1 ]; do
 	case "$1" in
@@ -36,12 +37,13 @@ for host in $hosts;do
 		echo host= $host
 		echo user= $user
 
-	cat <<-EOF | ssh $user@$host bash
-	grep -q $(hostname) ~/.ssh/authorized_keys || {
-		echo "$(cat ~/.ssh/id_rsa.pub)" >> ~/.ssh/authorized_keys
-	}
-	EOF
-	#scp ${BASH_SOURCE[0]} $user@$host:${BASH_SOURCE[0]}
+		# awk get last not empty line
+		pub_key=$(awk 'NF{s=$0}END{print s}' ~/.ssh/id_rsa.pub)
+		cat <<-EOF | ssh $user@$host bash
+		grep -q "${pub_key}" ~/.ssh/authorized_keys || {
+			echo "${pub_key}" >> ~/.ssh/authorized_keys
+		}
+		EOF
 
 		for t in {1..3};do
 			#rsync -h --human-readable --progress -r -e ssh $lpath $user@$host:$rpath
