@@ -29,12 +29,15 @@ cp_pub_key_to_remote()
 {
 	# awk get last not empty line
 	pub_key=$(awk 'NF{s=$0}END{print s}' ~/.ssh/id_rsa.pub)
+	self_path=$(realpath $0)
 
 	cat <<-EOF | ssh $user@$host bash
 	grep -q "${pub_key}" ~/.ssh/authorized_keys || {
 		echo "${pub_key}" >> ~/.ssh/authorized_keys
 	}
 	EOF
+	# scp this file to remote host
+	scp $self_path $user@$host:~/.local/bin
 }
 
 
