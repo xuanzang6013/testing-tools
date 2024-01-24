@@ -25,6 +25,24 @@ else
 	hosts=`cat /tmp/myrsync.cfg`
 fi
 
+cp_dependency_accrodingto_metadata()
+{
+	echo "cp_dependency_accrodingto_metadata"
+	if [ -r ./metadata ]
+	then
+		repoRequires=$(awk -F= '/repoRequires=/{print $2}' metadata)
+		repoRequires=$(echo $repoRequires | tr ";" " ")
+		prefix=${PWD%%networking*}
+
+		for relative_path in $repoRequires
+		do
+			sync_path=${prefix}/${relative_path}
+			echo "rsync dependency lib path: ${sync_path}"
+			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || { echo "sync repoRequires path fail: ${sync_path}"; exit 1; }
+		done
+	fi
+}
+
 cp_pub_key_to_remote()
 {
 	# awk get last not empty line
@@ -74,6 +92,7 @@ for host in $hosts;do
 			elif [ $ret == 11 ];then
 				echo "Remote: mkdir -p $rpath"
 				ssh $user@$host "mkdir -p $rpath"
+				cp_dependency_accrodingto_metadata
 			elif [ $ret == 255 ];then
 				echo "Cp pub key to remote authorized_keys"
 				cp_pub_key_to_remote
