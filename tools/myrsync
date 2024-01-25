@@ -36,7 +36,7 @@ cp_dependency_accrodingto_metadata()
 
 		for relative_path in $repoRequires
 		do
-			sync_path=${prefix}/${relative_path}
+			sync_path=${prefix}/${relative_path}/
 			echo "rsync dependency lib path: ${sync_path}"
 			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || { echo "sync repoRequires path fail: ${sync_path}"; exit 1; }
 		done
