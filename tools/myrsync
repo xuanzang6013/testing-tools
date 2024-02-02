@@ -26,20 +26,26 @@ else
 fi
 
 depth=0
-max_depth=2
+max_depth=5
 cp_dependency_accrodingto_metadata()
 {
 	if [ -r ./metadata ]
 	then
 		repoRequires=$(awk -F= '/repoRequires=/{print $2}' metadata)
 		repoRequires=$(echo $repoRequires | tr ";" " ")
+		if [ -z $repoRequires ]
+		then
+			echo "No more dependency"
+			return 0
+		fi
+
 		prefix=${PWD%%networking*}
 
 		for relative_path in $repoRequires
 		do
 			sync_path=${prefix}/${relative_path}/
 			echo "rsync dependency lib path: ${sync_path}"
-			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || { echo "sync repoRequires path fail: ${sync_path}"; exit 1; }
+			rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || { echo "sync repoRequires path fail: ${sync_path}"; exit 1; }
 			pushd $sync_path
 				((depth++))
 				if [ $depth -lt $max_depth ]
