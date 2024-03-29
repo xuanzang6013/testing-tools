@@ -2,6 +2,8 @@
 # Sync current path to remote machine. Create path if not exist in remote.
 # Usage: myrsync <hostname1/ip1> <hostname2/ip2> ...
 
+BkrPasswd=""
+
 until [ -z $1 ]; do
 	case "$1" in
 	-l|--login)    user="$2"; shift 2;;
@@ -33,6 +35,7 @@ cp_dependency_accrodingto_metadata()
 	then
 		repoRequires=$(awk -F= '/repoRequires=/{print $2}' metadata)
 		repoRequires=$(echo $repoRequires | tr ";" " ")
+
 		if [ -z $repoRequires ]
 		then
 			echo "No more dependency"
@@ -65,16 +68,23 @@ cp_pub_key_to_remote()
 	# awk get last not empty line
 	pub_key=$(awk 'NF{s=$0}END{print s}' ~/.ssh/id_rsa.pub)
 
-	# Attempt using 1minute private key, then cp local pub key to remote
-	cat <<-EOF | ssh -i /usr/share/qa-tools/1minutetip/1minutetip $user@$host bash
-	grep -q "${pub_key}" ~/.ssh/authorized_keys || {
-		echo "${pub_key}" >> ~/.ssh/authorized_keys
+	# command execute on remote side
+	remote_cmd="
+	grep -q \"${pub_key}\" ~/.ssh/authorized_keys || {
+		echo \"${pub_key}\" >> ~/.ssh/authorized_keys
 	}
-	EOF
+	"
+
+	# Cp local pub key to remote
+	# Attempt using 1minute private key, then beaker passwd
+	ssh -i /usr/share/qa-tools/1minutetip/1minutetip -o BatchMode=yes $user@$host "$remote_cmd" && return 0
+	[ -n $BkrPasswd ] && sshpass -p "${BkrPasswd}" ssh -o StrictHostKeyChecking=no $user@$host "$remote_cmd"
 }
 
 cp_self_to_remote()
 {
+	# Cp this script to remote
+
 	# remote: add ~/.local/bin to $PATH
 	cat <<-EOF | ssh $user@$host bash
 	mkdir -p ~/.local/bin
@@ -119,7 +129,7 @@ for host in $hosts;do
 			elif [ $ret == 255 ];then
 				echo "Cp pub key to remote authorized_keys"
 				cp_pub_key_to_remote
-				cp_self_to_remote
+				# cp_self_to_remote
 			else
 				echo "rsync unknown issue ret=$ret"
 			fi
