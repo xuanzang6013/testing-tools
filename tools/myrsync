@@ -48,7 +48,17 @@ cp_dependency_accrodingto_metadata()
 		do
 			sync_path=${prefix}/${relative_path}/
 			echo "rsync dependency lib path: ${sync_path}"
-			rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || { echo "sync repoRequires path fail: ${sync_path}"; exit 1; }
+			#rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
+			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
+			if [ $ret == 11 ];then
+				echo "Remote: mkdir -p ${sync_path}"
+				ssh $user@$host "mkdir -p $rpath"
+				rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
+			else
+				echo "sync repoRequires path fail: ${sync_path}"
+				exit 1
+			fi
+			}
 			pushd $sync_path
 				((depth++))
 				if [ $depth -lt $max_depth ]
@@ -116,8 +126,8 @@ for host in $hosts;do
 
 
 		for t in {1..4};do
-			#rsync --human-readable --progress -r -e 'ssh -o "NumberOfPasswordPrompts 0"' $lpath $user@$host:$rpath && break
-			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' $lpath $user@$host:$rpath 2>/dev/null && break
+			sed -in "'/$host/d'" ~/.ssh/known_hosts
+			rsync --human-readable --progress -r -e 'ssh -o "NumberOfPasswordPrompts 0"' $lpath $user@$host:$rpath 2>/dev/null && break
 			ret=$?
 			if [ $ret == 12 ];then
 				echo "Remote: yum -y install rsync"
