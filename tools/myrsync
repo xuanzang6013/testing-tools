@@ -49,7 +49,7 @@ cp_dependency_accrodingto_metadata()
 			sync_path=${prefix}/${relative_path}/
 			echo "rsync dependency lib path: ${sync_path}"
 			#rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
-			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
+			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
 			if [ $ret == 11 ];then
 				echo "Remote: mkdir -p ${sync_path}"
 				ssh $user@$host "mkdir -p $rpath"
@@ -126,7 +126,7 @@ for host in $hosts;do
 
 
 		for t in {1..4};do
-			sed -in "'/$host/d'" ~/.ssh/known_hosts
+			sed -in /$host/d ~/.ssh/known_hosts
 			rsync --human-readable --progress -r -e 'ssh -o "NumberOfPasswordPrompts 0"' $lpath $user@$host:$rpath 2>/dev/null && break
 			ret=$?
 			if [ $ret == 12 ];then
