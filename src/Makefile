@@ -9,3 +9,5 @@ ALL : $(TARGETS)
 . PHONY : clean
 clean :
 	rm -f $(TARGETS)
+install :
+	cp $(TARGETS) /usr/local/bin
