@@ -4,18 +4,51 @@
 
 BkrPasswd=""
 
+usage()
+{
+	echo ""
+	echo "Example:"	
+	echo "Cp all files/directories under current path to the remote same path"
+	echo "$0 <remote ip address>"
+	echo "$0 <hostname>"
+	echo ""
+	echo "Only cp a single file to remote"
+	echo "$0 -p <the_file_path> <hostname>"
+	echo ""
+	echo "use other username to login (default root)"
+	echo "$0 -l <other than root> <ip>"
+	echo ""
+}
+
 until [ -z $1 ]; do
 	case "$1" in
-	-l|--login)    user="$2"; shift 2;;
-	-p|--rpath)    rpath="$2";rpath_flag=1; shift 2;;
-	-*) shift;;
-	*) break;;
+	-l|--login)
+		user="$2"
+		shift 2
+		;;
+	-p|--path) #-p --path can be directory or a single file name
+		path=$(realpath $2)
+		if [ -e $path ]; then
+			shift 2
+		else
+			echo -e "Error:\n $path \ndoesn't exist"
+			exit 1
+		fi
+		;;
+	-*)
+		echo "Warn: unsupport paramter: $1 "
+		usage
+		exit 1
+		;;
+	*)
+		hosts+="$1 "
+		shift
+		;;
 	esac
 done
 
 user=${user:-root}
-lpaths="$(pwd)/"
-hosts="$*"
+path=${path:-$PWD/}
 
 if [[ -z $hosts && ! -e /tmp/myrsync.cfg ]];then
 	echo "hosts in \$1 can't empty"
@@ -52,7 +85,7 @@ cp_dependency_accrodingto_metadata()
 			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
 			if [ $ret == 11 ];then
 				echo "Remote: mkdir -p ${sync_path}"
-				ssh $user@$host "mkdir -p $rpath"
+				ssh $user@$host "mkdir -p ${sync_path}"
 				rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
 			else
 				echo "sync repoRequires path fail: ${sync_path}"
@@ -114,35 +147,26 @@ cp_self_to_remote()
 }
 
 for host in $hosts;do
-	for lpath in $lpaths;do
-		if [ "$rpath_flag" == "1" ];then
-			rpath=$rpath/`basename $lpath`/
+	echo host= $host
+	echo user= $user
+
+	for t in {1..4};do
+		sed -in /$host/d ~/.ssh/known_hosts
+		rsync --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts 0"' $path $user@$host:$path 2>/dev/null && break
+		ret=$?
+		if [ $ret == 12 ];then
+			echo "Remote: yum -y install rsync"
+			ssh $user@$host "yum -y install rsync"
+		elif [ $ret == 11 ];then
+			echo "Remote: mkdir -p $path"
+			ssh $user@$host "mkdir -p $path"
+			cp_dependency_accrodingto_metadata
+		elif [ $ret == 255 ];then
+			echo "Cp pub key to remote authorized_keys"
+			cp_pub_key_to_remote
+			# cp_self_to_remote
 		else
-			rpath=$lpath
+			echo "rsync unknown issue ret=$ret"
 		fi
-		echo rpath= $rpath
-		echo host= $host
-		echo user= $user
-
-
-		for t in {1..4};do
-			sed -in /$host/d ~/.ssh/known_hosts
-			rsync --human-readable --progress -r -e 'ssh -o "NumberOfPasswordPrompts 0"' $lpath $user@$host:$rpath 2>/dev/null && break
-			ret=$?
-			if [ $ret == 12 ];then
-				echo "Remote: yum -y install rsync"
-				ssh $user@$host "yum -y install rsync"
-			elif [ $ret == 11 ];then
-				echo "Remote: mkdir -p $rpath"
-				ssh $user@$host "mkdir -p $rpath"
-				cp_dependency_accrodingto_metadata
-			elif [ $ret == 255 ];then
-				echo "Cp pub key to remote authorized_keys"
-				cp_pub_key_to_remote
-				# cp_self_to_remote
-			else
-				echo "rsync unknown issue ret=$ret"
-			fi
-		done
 	done
 done
