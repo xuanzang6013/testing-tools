@@ -11,6 +11,7 @@ usage()
 	echo "Cp all files/directories under current path to the remote same path"
 	echo "$0 <remote ip address>"
 	echo "$0 <hostname>"
+	echo "This paramter can be omitted from second use (restored in /tmp/$(basename $0).cfg)"
 	echo ""
 	echo "Only cp a single file to remote"
 	echo "$0 -p <the_file_path> <hostname>"
@@ -53,7 +54,7 @@ done
 user=${user:-root}
 path=${path:-$PWD/}
 
-if [[ -z $hosts && ! -e /tmp/myrsync.cfg ]];then
+if [[ -z $hosts && ! -e /tmp/$(basename $0).cfg ]];then
 	echo "hosts in \$1 can't empty"
 	exit 1
 elif [[ ! -z $hosts ]]
