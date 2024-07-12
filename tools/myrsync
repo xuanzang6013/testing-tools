@@ -123,8 +123,15 @@ cp_pub_key_to_remote()
 
 	# Cp local pub key to remote
 	# Attempt using 1minute private key, then beaker passwd
-	ssh -i /usr/share/qa-tools/1minutetip/1minutetip -o BatchMode=yes $user@$host "$remote_cmd" && return 0
-	[ -n $BkrPasswd ] && sshpass -p "${BkrPasswd}" ssh -o StrictHostKeyChecking=no $user@$host "$remote_cmd"
+	if [ -e /usr/share/qa-tools/1minutetip/1minutetip ]; then
+		ssh -i /usr/share/qa-tools/1minutetip/1minutetip -o BatchMode=yes $user@$host "$remote_cmd" && return 0
+	fi
+	if [ -n $BkrPasswd ] && command -v sshpass ; then
+		 sshpass -p "${BkrPasswd}" ssh -o StrictHostKeyChecking=no $user@$host "$remote_cmd" && return 0
+	fi
+	# need passwd
+	echo "Need input passwd"
+	ssh $user@$host "$remote_cmd"
 }
 
 cp_self_to_remote()
