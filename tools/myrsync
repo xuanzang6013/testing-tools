@@ -171,6 +171,9 @@ for host in $hosts;do
 		elif [ $ret == 3 ];then
 			path=$(dirname $path)/
 			echo "remote directory doesn't exist, sync directory: $path"
+		elif [ $ret == 20 ];then
+			echo -e "\nInterrupted by Ctrl+C exit"
+			exit 0
 		else
 			echo "rsync unknown issue ret=$ret"
 		fi
