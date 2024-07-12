@@ -28,7 +28,10 @@ until [ -z $1 ]; do
 		;;
 	-p|--path) #-p --path can be directory or a single file name
 		path=$(realpath $2)
-		if [ -e $path ]; then
+		if [ -d $path ]; then
+			path=${path}/
+			shift 2
+		elif [ -f $path ]; then
 			shift 2
 		else
 			echo -e "Error:\n $path \ndoesn't exist"
@@ -166,8 +169,8 @@ for host in $hosts;do
 			cp_pub_key_to_remote
 			# cp_self_to_remote
 		elif [ $ret == 3 ];then
-			echo "remote directory doesn't exist, sync all file directory"
 			path=$(dirname $path)/
+			echo "remote directory doesn't exist, sync directory: $path"
 		else
 			echo "rsync unknown issue ret=$ret"
 		fi
