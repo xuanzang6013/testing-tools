@@ -165,6 +165,9 @@ for host in $hosts;do
 			echo "Cp pub key to remote authorized_keys"
 			cp_pub_key_to_remote
 			# cp_self_to_remote
+		elif [ $ret == 3 ];then
+			echo "remote directory doesn't exist, sync all file directory"
+			path=$(dirname $path)/
 		else
 			echo "rsync unknown issue ret=$ret"
 		fi
