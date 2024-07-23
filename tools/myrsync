@@ -9,14 +9,14 @@ usage()
 	echo ""
 	echo "Example:"
 	echo "Cp all files/directories under current path to the remote same path"
-	echo "$0 <remote ip address>"
-	echo "$0 <hostname>"
-	echo "This paramter can be omitted from second use (restored in /tmp/$(basename $0).cfg)"
+	echo "$0 <remote ip1> [ip2] ..."
+	echo "$0 <hostname1> [hostname2] ..."
+	echo "This paramter can be omitted from second usesage (restored in /tmp/$(basename $0).cfg)"
 	echo ""
-	echo "Only cp a single file to remote"
+	echo "cp a single file to remote. if the file doesn't exist in remote, then cp all directory"
 	echo "$0 -p <the_file_path> <hostname>"
 	echo ""
-	echo "use other username to login (default root)"
+	echo "use another username to login (default root)"
 	echo "$0 -l <other than root> <ip>"
 	echo ""
 }
@@ -27,7 +27,7 @@ until [ -z $1 ]; do
 		user="$2"
 		shift 2
 		;;
-	-p|--path|-f|--file|-d|--directory) # can be directory or a single file name
+	-p|--path|-f|--file|-d|--directory) # can be a directory or a file name
 		path=$(realpath $2)
 		if [ -d $path ]; then
 			path=${path}/
@@ -38,6 +38,15 @@ until [ -z $1 ]; do
 			echo -e "Error:\n $path \ndoesn't exist"
 			exit 1
 		fi
+		;;
+	-r|--reverse-copy)
+		_dir=$(dirname $2)
+		test -e ${_dir} || {
+			echo "Local path \"${_dir}\" doesn't exists, exit..."
+			exit 1
+		}
+		_target=$(realpath $2)
+		shift 2
 		;;
 	-*)
 		echo "Warn: unsupport paramter: $1 "
@@ -159,6 +168,16 @@ cp_self_to_remote()
 	scp $self_path $user@$host:~/.local/bin || exit 1
 }
 
+if [ -n "$_target" ];then
+	host=$(echo $hosts | awk '{print $1}')
+	echo "cp $_target from $host"
+	rsync -av ${user:-root}@${host}:${_target} ${_target}
+	ret=$?
+	if [ $ret == 23 ];then
+		echo "Remote $_target path doesn't exists"
+	fi
+	exit $ret
+fi
 
 for host in $hosts;do
 	echo host= $host
@@ -182,7 +201,7 @@ for host in $hosts;do
 			# cp_self_to_remote
 		elif [ $ret == 3 ];then
 			path=$(dirname $path)/
-			echo "remote directory doesn't exist, sync directory: $path"
+			echo "remote path doesn't exist, cp the whole directory: $path"
 		elif [ $ret == 20 ];then
 			echo -e "\nInterrupted by Ctrl+C exit"
 			exit 0
