@@ -1,6 +1,11 @@
 #! /bin/bash
+
 # Sync current path to remote machine. Create path if not exist in remote.
 # Usage: myrsync <hostname1/ip1> <hostname2/ip2> ...
+#
+# Author Yi Chen <yiche@redhat.com>
+# GPLv2
+
 
 BkrPasswd=""
 
@@ -15,6 +20,9 @@ usage()
 	echo ""
 	echo "cp a single file to remote. if the file doesn't exist in remote, then cp all directory"
 	echo "$0 -p <the_file_path> <hostname>"
+	echo ""
+	echo "Reverse fetch a single file from remote (won't overwrite remote)"
+	echo "$0 -r <fetch file path> [ip]"
 	echo ""
 	echo "use another username to login (default root)"
 	echo "$0 -l <other than root> <ip>"
@@ -78,7 +86,21 @@ max_depth=5
 
 _do_sync()
 {
-	prefix=${PWD%%networking*}
+	prefix=${PWD}
+	# find the git repo root path
+	until [ -e $prefix/.git/config ];do
+		prefix=$(dirname $prefix)
+		if [ "$prefix" == "/" ];then
+			# using "RepoRequires" field in metadata file to guess the git repo root path.
+			t=$(echo "$@" | awk '{print $NF}')
+			t=$(echo "$t" | cut -d'/' -f1)
+			prefix=${PWD%%$t*}
+			echo "Warning: presume prefix=$prefix"
+			break
+		fi
+	done
+
+
 	for relative_path in $@
 	do
 		sync_path=${prefix}/${relative_path}/
@@ -148,7 +170,7 @@ cp_pub_key_to_remote()
 
 cp_self_to_remote()
 {
-	# Cp this script to remote
+	echo "Cp $(basename $0) to remote ~/.local/bin"
 
 	# remote: add ~/.local/bin to $PATH
 	cat <<-EOF | ssh $user@$host bash
@@ -165,7 +187,7 @@ cp_self_to_remote()
 
 	# scp this file to remote host
 	self_path=$(realpath $0)
-	scp $self_path $user@$host:~/.local/bin || exit 1
+	scp $self_path $user@$host:~/.local/bin/ > /dev/null || exit 1
 }
 
 if [ -n "$_target" ];then
@@ -186,7 +208,7 @@ for host in $hosts;do
 
 	for t in {1..4};do
 		sed -in /$host/d ~/.ssh/known_hosts
-		rsync --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts 0"' $path $user@$host:$path 2>/dev/null && break
+		rsync --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts=0" -o StrictHostKeyChecking=no' $path $user@$host:$path 2>/dev/null && break
 		ret=$?
 		if [ $ret == 12 ];then
 			echo "Remote: yum -y install rsync"
@@ -198,12 +220,15 @@ for host in $hosts;do
 		elif [ $ret == 255 ];then
 			echo "Cp pub key to remote authorized_keys"
 			cp_pub_key_to_remote
-			# cp_self_to_remote
+			#cp_self_to_remote
 		elif [ $ret == 3 ];then
 			path=$(dirname $path)/
-			echo "remote path doesn't exist, cp the whole directory: $path"
+			echo "remote path doesn't exist, sync all files under the path: $path"
 		elif [ $ret == 20 ];then
-			echo -e "\nInterrupted by Ctrl+C exit"
+			echo -e "\nInterrupted by Ctrl+C exit..."
+			exit 0
+		elif [ $ret == 23 ];then
+			echo -e "\nrsync error: some files/attrs were not transferred (see previous errors) (code 23)"
 			exit 0
 		else
 			echo "rsync unknown issue ret=$ret"
