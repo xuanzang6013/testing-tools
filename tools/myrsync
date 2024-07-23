@@ -7,7 +7,7 @@ BkrPasswd=""
 usage()
 {
 	echo ""
-	echo "Example:"	
+	echo "Example:"
 	echo "Cp all files/directories under current path to the remote same path"
 	echo "$0 <remote ip address>"
 	echo "$0 <hostname>"
@@ -66,48 +66,50 @@ fi
 
 depth=0
 max_depth=5
+
+_do_sync()
+{
+	prefix=${PWD%%networking*}
+	for relative_path in $@
+	do
+		sync_path=${prefix}/${relative_path}/
+		echo "rsync dependency lib path: ${sync_path}"
+		Synced+="${sync_path}\n"
+
+		#rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
+		rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
+		if [ $ret == 11 ];then
+			echo "Remote: mkdir -p ${sync_path}"
+			ssh $user@$host "mkdir -p ${sync_path}"
+			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
+		else
+			echo "sync repoRequires path fail: ${sync_path}"
+			exit 1
+		fi
+		}
+		pushd $sync_path
+			((depth++))
+			if [ $depth -lt $max_depth ]
+			then
+				# recursive call
+				cp_dependency_accrodingto_metadata
+			else
+				echo "Too much dependencies? loop?"
+			fi
+		popd
+	done
+
+}
+
 cp_dependency_accrodingto_metadata()
 {
-	if [ -r ./metadata ]
+	local repoRequires=$(find . -name "metadata" |xargs -I {} awk -F= '/repoRequires=/{print $2}' {} | tr ";" "\n" |sort |uniq)
+	if [ -z "$repoRequires" ]
 	then
-		repoRequires=$(awk -F= '/repoRequires=/{print $2}' metadata)
-		repoRequires=$(echo $repoRequires | tr ";" " ")
-
-		if [ -z $repoRequires ]
-		then
-			echo "No more dependency"
-			return 0
-		fi
-
-		prefix=${PWD%%networking*}
-
-		for relative_path in $repoRequires
-		do
-			sync_path=${prefix}/${relative_path}/
-			echo "rsync dependency lib path: ${sync_path}"
-			#rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
-			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
-			if [ $ret == 11 ];then
-				echo "Remote: mkdir -p ${sync_path}"
-				ssh $user@$host "mkdir -p ${sync_path}"
-				rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
-			else
-				echo "sync repoRequires path fail: ${sync_path}"
-				exit 1
-			fi
-			}
-			pushd $sync_path
-				((depth++))
-				if [ $depth -lt $max_depth ]
-				then
-					# recursive call
-					cp_dependency_accrodingto_metadata
-				else
-					echo "Too much dependency? loop?"
-				fi
-			popd
-		done
+		echo "No more dependency"
+		return 0
 	fi
+	_do_sync $repoRequires
 }
 
 cp_pub_key_to_remote()
@@ -157,9 +159,11 @@ cp_self_to_remote()
 	scp $self_path $user@$host:~/.local/bin || exit 1
 }
 
+
 for host in $hosts;do
 	echo host= $host
 	echo user= $user
+	echo ""
 
 	for t in {1..4};do
 		sed -in /$host/d ~/.ssh/known_hosts
@@ -187,3 +191,8 @@ for host in $hosts;do
 		fi
 	done
 done
+Synced+="${path}\n"
+
+echo ""
+echo "Synced path:"
+echo -e "${Synced}"
