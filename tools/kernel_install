@@ -81,17 +81,20 @@ f2=${version%%-*}
 f3=${version#*-}
 
 prefix="https://download-node-02.eng.bos.redhat.com/brewroot/packages/$f1/$f2/$f3/$arch/"
-echo prefix = $prefix
+wget --spider --tries=1 $prefix/${name}-${version}.${arch}.rpm || {
+	echo "url uncorrect exit ..."
+	exit 1
+}
 
-#wget -nv --no-check-certificate $prefix/${name}-${version}.${arch}.rpm
-#wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm
-#wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm
-#wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm
-#wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm
-#wget --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
-#	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm
-#}
+wget -nv --no-check-certificate $prefix/${name}-${version}.${arch}.rpm
+wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm
+wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm
+wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm
+wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm
+wget --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
+	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm
+}
 
-yum -y localinstall ${name}-*.rpm || exit 1
+yum -y localinstall ${name}*${version}.${arch}.rpm || exit 1
 
 
