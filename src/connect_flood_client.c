@@ -298,7 +298,7 @@ int main(int argc, char *argv[])
 				cli_addr[i] = next_opt(&cli_addrs);
 
 			num_cli_ip = i;
-			addr_family = strchr(cli_addr[1], ':') ? AF_INET6 : AF_INET;
+			addr_family = strchr(cli_addr[0], ':') ? AF_INET6 : AF_INET;
 			break;
 		case 'P':
 			ser_port_range = optarg;
