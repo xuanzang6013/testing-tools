@@ -52,7 +52,14 @@ arch=${arch:-x86_64}
 
 echo $input | grep -q rt && {
 	bool_rt=true
-	f1=kernel-rt
+	# rt tree last version 284.90.1.rt14.375.el9_2
+	compare="284.900.1.rt14.375.el9_2"
+	if [ $version == $(echo -e "$compare\n$version" |sort -V | head -n 1) ];
+	then
+		f1=kernel
+	else
+		f1=kernel-rt
+	fi
 } || {
 	bool_rt=false
 	f1=kernel
@@ -79,6 +86,9 @@ echo name = $name
 
 f2=${version%%-*}
 f3=${version#*-}
+echo f1=$f1
+echo f2=$f2
+echo f3=$f3
 
 prefix="https://download-node-02.eng.bos.redhat.com/brewroot/packages/$f1/$f2/$f3/$arch/"
 wget --spider --tries=1 $prefix/${name}-${version}.${arch}.rpm || {
@@ -86,14 +96,15 @@ wget --spider --tries=1 $prefix/${name}-${version}.${arch}.rpm || {
 	exit 1
 }
 
-wget -nv --no-check-certificate $prefix/${name}-${version}.${arch}.rpm
-wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm
-wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm
-wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm
-wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm
+wget -nv --no-check-certificate $prefix/${name}-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm &
 wget --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
-	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm
+	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm &
 }
+wait
 
 yum -y localinstall ${name}*${version}.${arch}.rpm || exit 1
 
