@@ -101,7 +101,7 @@ wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm &
-wget --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
+wget --no-check-certificate --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
 	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm &
 }
 wait
