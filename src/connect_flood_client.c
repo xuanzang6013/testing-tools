@@ -361,14 +361,14 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	sem_t *sem_id;
-
-	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
-	if (sem_id == SEM_FAILED)
-		perror("sem_open");
-
-	if (sem_wait(sem_id) < 0)
-		perror("sem_wait in client");
+//	sem_t *sem_id;
+//
+//	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
+//	if (sem_id == SEM_FAILED)
+//		perror("sem_open");
+//
+//	if (sem_wait(sem_id) < 0)
+//		perror("sem_wait in client");
 
 	struct sigaction sa;
 	sigset_t sa_mask;

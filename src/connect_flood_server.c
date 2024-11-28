@@ -541,14 +541,14 @@ int main(int argc, char *argv[])
 	printf("\e[0;32mSERVER: Switch on/off close_all conns by `kill -s %d %d`\e[0m\n\n", (int)SIGUSR1, (int)getpid());
 	fflush(NULL);
 
-	sem_t *sem_id;
-
-	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
-	if (sem_id == SEM_FAILED)
-		perror("sem_open");
-
-	if (sem_post(sem_id) < 0)
-		perror("sem_post");
+//	sem_t *sem_id;
+//
+//	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
+//	if (sem_id == SEM_FAILED)
+//		perror("sem_open");
+//
+//	if (sem_post(sem_id) < 0)
+//		perror("sem_post");
 
 	count_t bef, aft;
 
