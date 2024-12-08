@@ -33,12 +33,14 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/epoll.h>
+#include "connect_flood.h"
 
 #define MAX_IP 1000
-#define NUM_FD 30000000
+#define MAX_TRD 1000
 #define IS_TCP 6
 #define IS_UDP 17
 #define IS_SCTP 132
+#define BUFFER_SIZE 0x20000
 
 char *cli_port_min;
 char *cli_port_max;
@@ -55,36 +57,34 @@ int sock_protocol;
 int sock_type = SOCK_STREAM;
 int (*connect_func)(int sockfd, const struct sockaddr *s_addr, socklen_t len);
 
-char *next_opt(char **s)
-{
-	char *sbegin = *s;
-	char *p;
-
-	if (!sbegin)
-		return NULL;
-
-	for (p = sbegin; *p; p++) {
-		if (*p == ',' || *p == '-') {
-			*p = '\0';
-			*s = p + 1;  //point to next param
-			return sbegin;
-		}
-	}
-	*s = NULL;  //to NULL last time.
-	return sbegin;
-}
+int Throughput;
 
 void sg_handler(int sig)
 {
 	if (sig == SIGUSR1) {
 		close_soon = (close_soon) ? 0 : 1;
-		printf("\e[1;31mCLIENT:close_soon = %d \e[0m\n", close_soon);
+		printf("\e[1;31mCLIENT: close_soon = %d \e[0m\n", close_soon);
 		fflush(NULL);
 		return;
 	}
-	block_flag = (block_flag) ? 0 : 1;
-	printf("\e[1;31mCLIENT:block_flag = %d \e[0m\n", block_flag);
-	fflush(NULL);
+	if (sig == SIGUSR2) {
+		block_flag = (block_flag) ? 0 : 1;
+		printf("\e[1;31mCLIENT: block_flag = %d \e[0m\n", block_flag);
+		fflush(NULL);
+	}
+	if (sig == SIGRTMIN) {
+		if (!Throughput) {
+			Throughput = 1;
+			block_flag = 0;
+			printf("\e[1;31mCLIENT: Switch Throughput mode on. block_flag=%d \e[0m\n", block_flag);
+		}
+		else {
+			Throughput = 0;
+			block_flag = 1;
+			printf("\e[1;31mCLIENT: Switch Throughput mode off. block_flag=%d \e[0m\n", block_flag);
+		}
+		fflush(NULL);
+	}
 }
 
 void *set_sockaddr(const char *addr, int port, struct sockaddr_storage *sockaddr)
@@ -138,7 +138,7 @@ int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)
 		perror("CLIENT: UDP send");
 		return -1;
 	}
-	// Don't send too fast, wait server write back.
+	/* Don't send too fast, wait server write back */
 	if (recv(sockfd, buf, sizeof(buf), 0) == -1) {
 		//perror("CLIENT: UDP recv");
 		return -1;
@@ -150,23 +150,49 @@ int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)
 	return 0;
 }
 
+void fill_buf(char* buffer)
+{
+	int i, repeat;
+	char * payload;
+	size_t len;
+	payload = "connection flood tool payload\n";
+	len = strlen(payload);
+	repeat = sizeof(buffer) / len;
+
+	for(i = 0; i < repeat; i++) {
+		memcpy(buffer + (i * len), payload, len);
+	}
+}
+
 void *worker(void *addrstr)
 {
-	int sockfd, s_port, c_port, i, fd, ready, epfd, enable;
+	int sockfd, s_port, c_port, i, sendfd, ready, epfd, enable;
+	int * travel_p = NULL;
+	buff_t buf_state;
 
-	// create epoll instance
+	/* create epoll instance */
 	int num_ser_port = atoi(ser_port_max) - atoi(ser_port_min) + 1;
 	int num_cli_port = atoi(cli_port_max) - atoi(cli_port_min) + 1;
 	int max_events = 100000;
 	struct epoll_event ev;
 	struct epoll_event evlist[max_events];
+	char SNDBUF[BUFFER_SIZE] = {};
+	fill_buf(SNDBUF);
 
 	epfd = epoll_create(5);
 	if (epfd == -1) {
 		perror("epoll_create");
 		exit(1);
 	}
-	ev.events = EPOLLRDHUP; /* Only interested in close events */
+
+	/* Only interested in close events */
+	ev.events = EPOLLRDHUP;
+
+	/* this is per thread instance */
+	if (create_queue(&buf_state) != 0) {
+		dprintf(2, "calloc failed\n");
+		exit(1);
+	}
 
 	/* Support for both IPv4 and IPv6.
 	 * sockaddr_storage: Can contain both sockaddr_in and sockaddr_in6
@@ -177,13 +203,13 @@ void *worker(void *addrstr)
 	bzero(&cliaddr, sizeof(cliaddr));
 	bzero(&seraddr, sizeof(seraddr));
 
-	//For better performance, config these once here, but not in deep loop.
+	/* For better performance, config these once here, but not in deep loop */
 	s_addr = set_sockaddr(addrstr, 0, &seraddr);
 	s_addr = set_sockaddr(NULL, 0, &seraddr);
 	c_addr = set_sockaddr(NULL, 0, &cliaddr);
 
 	snprintf(msg, sizeof(msg), "Hello Server...\n");
-	/*Loop for client ports*/
+	/* Loop for client ports */
 	for (c_port = atoi(cli_port_min); c_port <= atoi(cli_port_max); c_port++) {
 		c_addr = set_sockaddr(NULL, c_port, &cliaddr);
 		/* Loop for client ip */
@@ -216,11 +242,59 @@ void *worker(void *addrstr)
 					continue;
 				}
 
-				ev.data.fd = sockfd;
-				if (epoll_ctl(epfd, EPOLL_CTL_ADD, sockfd, &ev) == -1) {
-					perror("epoll_ctl ADD");
-					exit(1);
+				if (close_soon) {
+					if (close(sockfd) == -1) {
+						perror("close_soon");
+					}
 				}
+				else {
+					if (enqueue(sockfd, &buf_state) != 0) {
+						dprintf(2, "enqueue failed, buffer full\n");
+						exit(1);
+					}
+
+					ev.data.fd = sockfd;
+					if (epoll_ctl(epfd, EPOLL_CTL_ADD, sockfd, &ev) == -1) {
+						perror("epoll_ctl ADD");
+						exit(1);
+					}
+				}
+
+				while (Throughput) {
+					sendfd = travelqueue(&buf_state, &travel_p);
+					dprintf(2,"throughput send on fd = %d\n", sendfd);
+					if (sendfd < 0)
+						dprintf(2, "travelqueue error! \n");
+
+					/* set NONBLOCK mode */
+					int f_state = fcntl(sendfd, F_GETFL, 0);
+					if (f_state == -1) {
+						perror("fcntl F_GETFL");
+					}
+
+					if (fcntl(sendfd, F_SETFL, f_state | O_NONBLOCK) == -1) {
+						perror("fcntl F_SETFL");
+					}
+
+					while (1) {
+						ssize_t bytes_sent = send(sendfd, SNDBUF, BUFFER_SIZE, 0);
+						if (bytes_sent < 0) {
+							if (errno == EAGAIN) {
+								//dprintf (2,"send EAGAIN: Resource temporarily unavailable\n");
+								break;
+							}
+							else {
+								perror("send failed exit Thoughput mode");
+								printf("sendfd = %d\n", sendfd);
+								block_flag = 1;
+								printf("\e[1;31mCLIENT:block_flag = %d \e[0m\n", block_flag);
+								goto out_Throughput;
+							}
+						}
+						//dprintf (2,"%d bytes sent\n", bytes_sent);
+					}
+				}
+				out_Throughput:
 
 				/*
 				 * When receive SIGUSR2 block here
@@ -233,7 +307,8 @@ void *worker(void *addrstr)
 						exit(1);
 					}
 					for (i = 0; i < ready; i++) {
-						if (evlist[i].events & EPOLLRDHUP) { // peer closing
+						/* peer closing */
+						if (evlist[i].events & EPOLLRDHUP) {
 							if (epoll_ctl(epfd, EPOLL_CTL_DEL, evlist[i].data.fd, &ev) == -1) {
 								perror("epoll_ctl DEL");
 								exit(1);
@@ -241,6 +316,7 @@ void *worker(void *addrstr)
 							if (close(evlist[i].data.fd) == -1) {
 								perror("client handle close");
 							}
+
 						} else {
 							if (evlist[i].events & (EPOLLHUP | EPOLLERR)) {
 								dprintf(2, "epoll returned EPOLLHUP | EPOLLERR\n");
@@ -248,13 +324,6 @@ void *worker(void *addrstr)
 							}
 						}
 					}
-				}
-
-				if (close_soon) {
-					if (close(sockfd) == -1) {
-						perror("close_soon");
-					}
-					continue;
 				}
 			}
 		}
@@ -286,7 +355,13 @@ int main(int argc, char *argv[])
 	ssize_t n;
 	int opt, i, sysfd;
 	char nr_open[100] = {0};
-	// Capitals config Local ,lowercase config remote
+
+	if (argc < 2) {
+		usage(argv);
+		exit (1);
+	}
+
+	/* Capitals config Local ,lowercase config remote */
 	while ((opt = getopt(argc, argv, "H:h:P:p:tusc")) != -1) {
 		switch (opt) {
 		case 'H':
@@ -361,14 +436,16 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-//	sem_t *sem_id;
-//
-//	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
-//	if (sem_id == SEM_FAILED)
-//		perror("sem_open");
-//
-//	if (sem_wait(sem_id) < 0)
-//		perror("sem_wait in client");
+/*
+	sem_t *sem_id;
+
+	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
+	if (sem_id == SEM_FAILED)
+		perror("sem_open");
+
+	if (sem_wait(sem_id) < 0)
+		perror("sem_wait in client");
+*/
 
 	struct sigaction sa;
 	sigset_t sa_mask;
@@ -387,10 +464,17 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf("\e[0;34mCLIENT: Switch on/off close_soon  `kill -s %d %d` \e[0m\n", (int)SIGUSR1, (int)getpid());
-	printf("\e[0;34mCLIENT: Pause/Continue            `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
-	fflush(NULL);
+	if (sigaction(SIGRTMIN, &sa, NULL) != 0) {
+		perror("sigaction, SIGRTMIN");
+		exit(1);
+	}
 
+	printf("\e[0;34mCLIENT: Close soon on/off            `kill -s %d %d` \e[0m\n", (int)SIGUSR1, (int)getpid());
+	printf("\e[0;34mCLIENT: Pause/Continue (block_flag)  `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
+	printf("\e[0;34mCLIENT: Throughput mode on/off       `kill -s %d %d` \e[0m\n", (int)SIGRTMIN, (int)getpid());
+
+
+	fflush(NULL);
 	pthread_t threads[MAX_IP];
 
 	for (i = 0; ser_addrs; i++) {
@@ -399,7 +483,7 @@ int main(int argc, char *argv[])
 	}
 	int num_ser_ip = i;
 
-	//Wait all threads to join
+	/* Wait all threads to join block the main() */
 	for (i = 0; i < num_ser_ip; i++) {
 		if (pthread_join(threads[i], NULL) != 0)
 			perror("pthread_join");

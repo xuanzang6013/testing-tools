@@ -30,12 +30,13 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/epoll.h>
+#include "connect_flood.h"
 
 #define MAX_TRD 1000
-#define MAX_FD 30000000
 #define IS_TCP 6
 #define IS_UDP 17
 #define IS_SCTP 132
+#define BUFFER_SIZE 0x20000
 
 char *ser_port_min;
 char *ser_port_max;
@@ -43,6 +44,7 @@ int closing;
 int proto = IS_TCP;
 int sock_type = SOCK_STREAM;
 int sock_protocol;
+int Throughput;
 sa_family_t addr_family = AF_INET6;
 
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -52,86 +54,30 @@ static pthread_barrier_t barrier;
 int *cnt_newp[MAX_TRD];
 int cnt_closed[MAX_TRD];
 int ep_conns[MAX_TRD];
+uint64_t cnt_nbytes[MAX_TRD];
 
 typedef struct count {
 	int new;
 	int closed;
+	uint64_t nbytes;
 } count_t;
 
 typedef struct thread_param {
 	char *addrp;
+	/* thread sequence */
 	int thd_seq;
 } thdp_t;
 
 int (*accept_func)(int fd, struct sockaddr *peeraddr, socklen_t *addrlen);
 
-typedef struct buff_state {
-	int *min;
-	int *max;
-	int *head;
-	int *end;
-} buff_t;
-
-int create_queue(buff_t *st) //buff state
-{
-	int *stor;
-
-	stor = (int *)calloc(MAX_FD, sizeof(int));
-	if (!stor) {
-		perror("calloc");
-		return -1;
-	}
-	st->min = st->head = st->end = stor;
-	st->max = stor + MAX_FD - 1;
-	return 0;
-}
-
-int enqueue(int fd, buff_t *st)
-{
-	if (st->end + 1 == st->head)
-		return -1; //full
-	*st->end = fd;
-	st->end += 1;
-	if (st->end == st->max)
-		st->end = st->min;
-	return 0;
-}
-
-int dequeue(buff_t *st)
-{
-	int fd;
-
-	if (st->head == st->end)
-		return -1; //empty
-	fd = *st->head;
-	st->head++;
-	return fd;
-}
-
-char *next_opt(char **s)
-{
-	char *sbegin = *s;
-	char *p;
-
-	if (!sbegin)
-		return NULL;
-	for (p = sbegin; *p; p++) {
-		if (*p == ',' || *p == '-') {
-			*p = '\0';
-			*s = p + 1;  //next param
-			return sbegin;
-		}
-	}
-	*s = NULL;
-	return sbegin;
-}
 
 void sg_handler(int sig)
 {
-	if (sig == SIGUSR1)
+	if (sig == SIGUSR1) {
 		closing = (closing) ? 0 : 1;
-	printf("\e[1;31mSERVER:closing all= %d \e[0m\n", closing);
-	fflush(NULL);
+		printf("\e[1;31mSERVER:closing all= %d \e[0m\n", closing);
+		fflush(NULL);
+	}
 }
 
 int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
@@ -171,7 +117,7 @@ int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 		return -1;
 	}
 
-	// wait client write back
+	/* wait client to write back */
 	if (recv(connfd, buf, sizeof(buf), 0) == -1) {
 		perror("SERVER: UDP read");
 		return -1;
@@ -179,22 +125,26 @@ int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 	return connfd;
 }
 
-void *handle_peer_close(void *p)
+void *handle_peer_close_or_send(void *p)
 {
 	thdp_t *thp = (thdp_t *)p;
+	/* thp: thread parameter */
 	int ep_conn = ep_conns[thp->thd_seq];
 
+	char RECVBUF[BUFFER_SIZE];
 	int max_events = 100000;
-	int ready_close, i;
+	int ready, i;
+	ssize_t nbytes;
 	struct epoll_event conn_evlist[max_events];
 
 	while (1) {
-		ready_close = epoll_wait(ep_conn, conn_evlist, max_events, -1);
-		if (ready_close == -1) {
+		ready = epoll_wait(ep_conn, conn_evlist, max_events, -1);
+		if (ready == -1) {
 			perror("SERVER: epoll_wait");
 			exit(1);
 		}
-		for (i = 0; i < ready_close; i++) {
+		for (i = 0; i < ready; i++) {
+			/* ready to close */
 			if (conn_evlist[i].events & EPOLLRDHUP) {
 				if (epoll_ctl(ep_conn, EPOLL_CTL_DEL, conn_evlist[i].data.fd, NULL) == -1) {
 					perror("epoll_ctl DEL");
@@ -204,7 +154,18 @@ void *handle_peer_close(void *p)
 					perror("handle_peer_close");
 				}
 				cnt_closed[thp->thd_seq]++;
-			} else {
+			}
+			/* ready to recv */
+			else if (conn_evlist[i].events & EPOLLIN) {
+				Throughput = 1;
+				nbytes = recv(conn_evlist[i].data.fd, RECVBUF, BUFFER_SIZE, 0);
+				if (nbytes < 0) {
+					perror("recv failed");
+				}
+				cnt_nbytes[thp->thd_seq] += nbytes;
+				//dprintf(2, "%d bytes received\n", nbytes);
+			}
+			else {
 				if (conn_evlist[i].events & (EPOLLHUP | EPOLLERR)) {
 					perror("epoll returned EPOLLHUP | EPOLLERR");
 					exit(1);
@@ -236,13 +197,14 @@ void *handle_peer_new(void *p)
 		cnt_newp[i] = &cnt;
 		break;
 	}
-	// thread isolate
-	if (create_queue(&buf_state) != 0) {
-		dprintf(2, "calloc failed\n");
-		exit(1);
-	}
 	if (pthread_mutex_unlock(&mtx) != 0) {
 		perror("pthread_mutex_unlock");
+		exit(1);
+	}
+
+	/* this is a per thread instance */
+	if (create_queue(&buf_state) != 0) {
+		dprintf(2, "calloc failed\n");
 		exit(1);
 	}
 
@@ -266,7 +228,7 @@ void *handle_peer_new(void *p)
 		inet_pton(AF_INET6, (char *)addrstr, &addr6->sin6_addr);
 	}
 
-	// create listening socket epoll instance
+	/* create listening socket epoll instance */
 	max_listen = atoi(ser_port_max) - atoi(ser_port_min) + 1;
 	struct epoll_event ev, conn_ev;
 	struct epoll_event evlist[max_listen];
@@ -276,6 +238,8 @@ void *handle_peer_new(void *p)
 		perror("epoll_create");
 		exit(1);
 	}
+	/* Interested in peer closing and sending events */
+	conn_ev.events = EPOLLRDHUP | EPOLLIN;
 
 	/*Loop for server port*/
 	for (s_port = atoi(ser_port_min); s_port <= atoi(ser_port_max); s_port++) {
@@ -307,7 +271,8 @@ void *handle_peer_new(void *p)
 
 		listen(sockfd, 20);
 
-		ev.events = EPOLLIN; // Only interested in input events
+		/* Only interested in input events */
+		ev.events = EPOLLIN;
 		ev.data.fd = sockfd;
 		if (epoll_ctl(ep_lis, EPOLL_CTL_ADD, sockfd, &ev) == -1) {
 			perror("epoll_ctl");
@@ -315,7 +280,6 @@ void *handle_peer_new(void *p)
 		}
 	}
 
-	// barrier to wait
 	int s = pthread_barrier_wait(&barrier);
 
 	if (s != 0 && s != PTHREAD_BARRIER_SERIAL_THREAD) {
@@ -350,12 +314,12 @@ void *handle_peer_new(void *p)
 				dprintf(2, "Too many fd %d == %d, exceed buffer\n", cnt, MAX_FD);
 				exit(1);
 			}
+
 			if (enqueue(connfd, &buf_state) != 0) {
 				dprintf(2, "enqueue failed, buffer full\n");
 				exit(1);
 			}
 
-			conn_ev.events = EPOLLRDHUP; // Only interested in peer closing events
 			conn_ev.data.fd = connfd;
 			if (epoll_ctl(ep_conn, EPOLL_CTL_ADD, connfd, &conn_ev) == -1) {
 				perror("epoll_ctl ep_conn");
@@ -367,6 +331,7 @@ void *handle_peer_new(void *p)
 			fd = dequeue(&buf_state);
 			if (fd == -1) {
 				//dprintf(2,"dequeue fail, empty\n");
+				sleep (1);
 				break;
 			}
 			if (close(fd) == -1) {
@@ -376,7 +341,7 @@ void *handle_peer_new(void *p)
 		}
 	}
 
-	// Block this thread, should not reach
+	/* Block this thread, should not reach here */
 	if (pthread_mutex_lock(&mtx) != 0) {
 		perror("connect");
 		exit(1);
@@ -404,6 +369,9 @@ count_t cnt_add(void)
 	for (i = 0; cnt_closed[i]; i++)
 		val.closed += cnt_closed[i];
 
+	for (i = 0; cnt_nbytes[i]; i++)
+		val.nbytes += cnt_nbytes[i];
+
 	return val;
 }
 
@@ -429,7 +397,12 @@ int main(int argc, char *argv[])
 	char nr_open[100] = {0};
 	ssize_t n;
 
-	//capital config Receiver ,lowercase config Sender
+	if (argc < 2) {
+		usage(argv);
+		exit(1);
+	}
+
+	/* capital config Receiver ,lowercase config Sender */
 	while ((opt = getopt(argc, argv, "H:P:tus")) != -1) {
 		switch (opt) {
 		case 'H':
@@ -438,7 +411,7 @@ int main(int argc, char *argv[])
 				ser_addr[i] = next_opt(&ser_addrs);
 
 			num_threads = i;
-			// judge ipv4/6 by find ':' in it
+			/* judge ipv4/6 by find ':' in the first address string */
 			addr_family = strchr(ser_addr[0], ':') ? AF_INET6 : AF_INET;
 			break;
 		case 'P':
@@ -503,7 +476,7 @@ int main(int argc, char *argv[])
 	thdp_t thdp[MAX_TRD];
 
 	for (i = 0; i < num_threads; i++) {
-		// create connfds epoll instance
+		/* create connfds epoll instance */
 		ep_conns[i] = epoll_create(5);
 		if (ep_conns[i] == -1) {
 			perror("epoll_create connfd");
@@ -514,7 +487,7 @@ int main(int argc, char *argv[])
 		thdp[i].thd_seq = i;
 		if (pthread_create(&threads[i], NULL, (void *)handle_peer_new, &thdp[i]) != 0)
 			perror("pthread_create");
-		if (pthread_create(&threads[i], NULL, (void *)handle_peer_close, &thdp[i]) != 0)
+		if (pthread_create(&threads[i], NULL, (void *)handle_peer_close_or_send, &thdp[i]) != 0)
 			perror("pthread_create");
 	}
 
@@ -538,17 +511,20 @@ int main(int argc, char *argv[])
 		perror("sigaction");
 		exit(1);
 	}
+
 	printf("\e[0;32mSERVER: Switch on/off close_all conns by `kill -s %d %d`\e[0m\n\n", (int)SIGUSR1, (int)getpid());
 	fflush(NULL);
 
-//	sem_t *sem_id;
-//
-//	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
-//	if (sem_id == SEM_FAILED)
-//		perror("sem_open");
-//
-//	if (sem_post(sem_id) < 0)
-//		perror("sem_post");
+/*
+	sem_t *sem_id;
+
+	sem_id = sem_open("ready_to_connect", O_CREAT, 0600, 0);
+	if (sem_id == SEM_FAILED)
+		perror("sem_open");
+
+	if (sem_post(sem_id) < 0)
+		perror("sem_post");
+*/
 
 	count_t bef, aft;
 
@@ -557,21 +533,27 @@ int main(int argc, char *argv[])
 		sleep(1);
 		aft = cnt_add();
 
-		switch (proto) {
-		case IS_UDP:
-			printf("\e[0;32m%d udp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-			break;
-		case IS_TCP:
-			printf("\e[0;32m%d tcp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-			break;
-		case IS_SCTP:
-			printf("\e[0;32m%d sctp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-			break;
+		if (Throughput) {
+			printf("\e[0;32mReceived: %0.2d MBytes/sec \e[0m\n", (aft.nbytes - bef.nbytes) / 1000000);
+			Throughput = 0;
 		}
-		fflush(NULL);
+		else {
+			switch (proto) {
+			case IS_UDP:
+				printf("\e[0;32m%d udp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
+				break;
+			case IS_TCP:
+				printf("\e[0;32m%d tcp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
+				break;
+			case IS_SCTP:
+				printf("\e[0;32m%d sctp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
+				break;
+			}
+			fflush(NULL);
+		}
 	}
 
-	// Wait all threads to finish
+	/* Wait all threads to finish */
 	for (i = 0; i < num_threads; i++) {
 		if (pthread_join(threads[i], NULL) != 0)
 			perror("pthread_join");
