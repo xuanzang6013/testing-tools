@@ -375,7 +375,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Capitals config Local ,lowercase config remote */
-	while ((opt = getopt(argc, argv, "H:h:P:p:tusc")) != -1) {
+	while ((opt = getopt(argc, argv, "H:h:P:p:b:tusc")) != -1) {
 		switch (opt) {
 		case 'H':
 			ser_addrs = optarg;
