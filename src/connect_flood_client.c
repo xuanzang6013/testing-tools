@@ -38,11 +38,7 @@
 #include <sys/epoll.h>
 #include "connect_flood.h"
 
-#define MAX_IP 1000
-#define MAX_TRD 1000
-#define IS_TCP 6
-#define IS_UDP 17
-#define IS_SCTP 132
+#define MAX_CLI_IP 1000
 
 /* recv buffer size default 128k */
 size_t BUFFER_SIZE = 0x20000;
@@ -51,8 +47,7 @@ char *cli_port_min;
 char *cli_port_max;
 char *ser_port_min;
 char *ser_port_max;
-char *cli_addr[MAX_IP];
-char msg[1000];
+char *cli_addr[MAX_CLI_IP];
 int close_soon;
 int block_flag;
 int num_cli_ip;
@@ -213,7 +208,6 @@ void *worker(void *addrstr)
 	s_addr = set_sockaddr(NULL, 0, &seraddr);
 	c_addr = set_sockaddr(NULL, 0, &cliaddr);
 
-	snprintf(msg, sizeof(msg), "Hello Server...\n");
 	/* Loop for client ports */
 	for (c_port = atoi(cli_port_min); c_port <= atoi(cli_port_max); c_port++) {
 		c_addr = set_sockaddr(NULL, c_port, &cliaddr);
@@ -369,7 +363,7 @@ int main(int argc, char *argv[])
 	char *ser_addrs = NULL;
 	char *cli_addrs = NULL;
 	ssize_t n;
-	int opt, i, sysfd;
+	int opt, i, sysfd, num_ser_ip;
 	char nr_open[100] = {0};
 
 	if (argc < 2) {
@@ -496,13 +490,12 @@ int main(int argc, char *argv[])
 
 
 	fflush(NULL);
-	pthread_t threads[MAX_IP];
+	pthread_t threads[MAX_TRD];
 
-	for (i = 0; ser_addrs; i++) {
+	for (num_ser_ip = 0; ser_addrs; num_ser_ip++) {
 		if (pthread_create(&threads[i], NULL, (void *)worker, next_opt(&ser_addrs)) != 0)
 			perror("pthread_create");
 	}
-	int num_ser_ip = i;
 
 	/* Wait all threads to join block the main() */
 	for (i = 0; i < num_ser_ip; i++) {

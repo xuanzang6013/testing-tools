@@ -34,10 +34,6 @@
 #include <sys/epoll.h>
 #include "connect_flood.h"
 
-#define MAX_TRD 1000
-#define IS_TCP 6
-#define IS_UDP 17
-#define IS_SCTP 132
 
 /* send buffer size default 128k */
 size_t BUFFER_SIZE = 0x20000;
@@ -298,6 +294,7 @@ void *handle_peer_new(void *p)
 			}
 
 			if (++cnt_new[thp->thd_seq] >= MAX_FD) {
+
 				dprintf(2, "Too many fd %d == %d, exceed buffer\n", cnt_new[thp->thd_seq], MAX_FD);
 				exit(1);
 			}

@@ -5,6 +5,12 @@
 #define MAX_FD 10000000
 #endif
 
+#define MAX_TRD 1000
+#define IS_TCP 6
+#define IS_UDP 17
+#define IS_SCTP 132
+
+
 typedef struct buff_state {
 	int *min;
 	int *max;
