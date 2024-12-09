@@ -10,6 +10,8 @@
  * e.g.
  * ./connect_flood_server -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -t &
  * Switch on/off close_all conections by `kill -s 10 <pid>`
+ *
+ * Authors: Chen Yi <yiche@redhat.com>
  */
 
 #include <unistd.h>
@@ -36,7 +38,9 @@
 #define IS_TCP 6
 #define IS_UDP 17
 #define IS_SCTP 132
-#define BUFFER_SIZE 0x20000
+
+/* send buffer size default 128k */
+size_t BUFFER_SIZE = 0x20000;
 
 char *ser_port_min;
 char *ser_port_max;
@@ -168,7 +172,6 @@ void *handle_peer_close_or_send(void *p)
 			else {
 				if (conn_evlist[i].events & (EPOLLHUP | EPOLLERR)) {
 					perror("epoll returned EPOLLHUP | EPOLLERR");
-					exit(1);
 				}
 			}
 		}
@@ -377,12 +380,18 @@ count_t cnt_add(void)
 
 void usage(char *argv[])
 {
-	printf(" Usage: %s -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> [-t|-u|-s]\n", argv[0]);
+	printf("\n");
+	printf(" Usage: %s -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> [-t|-u|-s|-b <size>]\n", argv[0]);
 	printf(" -H	specify one or more server addresses, separate by ','. one addr for each thread\n");
-	printf(" -p	specify client port range, separate by '-'\n");
+	printf(" -P	specify server port range to listen on, separate by '-'\n");
+	printf(" -b	set \"Throughput mode\" recv BUFFER size(equal to the recv size per call) Useful when you need to adjust the reception performance\n");
 	printf(" -t	TCP mode (default)\n");
 	printf(" -u	UDP mode\n");
-	printf(" -s	SCTP mode\n\n");
+	printf(" -s	SCTP mode\n");
+	printf("\n");
+	printf(" Singals that support runtime configuration\n");
+	printf(" Close_All connections on/off    kill -s %d <pid>`\n", (int)SIGUSR1);
+	printf("\n");
 	printf("Example:\n");
 	printf("%s -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500\n", argv[0]);
 	printf("%s -t -H 2000::100,2000::101 -P 1001-1500\n", argv[0]);
@@ -403,7 +412,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* capital config Receiver ,lowercase config Sender */
-	while ((opt = getopt(argc, argv, "H:P:tus")) != -1) {
+	while ((opt = getopt(argc, argv, "H:P:b:tus")) != -1) {
 		switch (opt) {
 		case 'H':
 			ser_addrs = optarg;
@@ -438,6 +447,9 @@ int main(int argc, char *argv[])
 			sock_type = SOCK_STREAM;
 			accept_func = accept;
 			sock_protocol = IPPROTO_SCTP;
+			break;
+		case 'b':
+			BUFFER_SIZE = (size_t) atoi(optarg);
 			break;
 		default:
 			dprintf(2, "Invalid parameter, exit");
@@ -534,7 +546,7 @@ int main(int argc, char *argv[])
 		aft = cnt_add();
 
 		if (Throughput) {
-			printf("\e[0;32mReceived: %0.2d MBytes/sec \e[0m\n", (aft.nbytes - bef.nbytes) / 1000000);
+			printf("\e[0;32mReceived: %0.2f MBytes/sec, RECVBUF=%d \e[0m\n", (aft.nbytes - bef.nbytes) / (float)1000000, BUFFER_SIZE);
 			Throughput = 0;
 		}
 		else {

@@ -11,8 +11,11 @@
  * e.g.
  * connect_flood_client -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 \
  * -h 10.0.2.101,10.0.2.102,10.0.2.103 -p 50001-60000 -t
- * Switch on/off close_soon  `kill -s 10 15250` close directly after connected.
- * Pause/Continue            `kill -s 12 15250` pause, ready to handle peer close.
+ * Switch on/off close_soon  `kill -s 10 <pid>` close directly after connected.
+ * Pause/Continue            `kill -s 12 <pid>` pause, ready to handle peer close.
+ * Enter Throughput mode     `kill -s 34 <pid>` client do best to send data in NONBLOCK mode.
+ *
+ *  Authors: Chen Yi <yiche@redhat.com>
  */
 
 #include <unistd.h>
@@ -40,7 +43,9 @@
 #define IS_TCP 6
 #define IS_UDP 17
 #define IS_SCTP 132
-#define BUFFER_SIZE 0x20000
+
+/* recv buffer size default 128k */
+size_t BUFFER_SIZE = 0x20000;
 
 char *cli_port_min;
 char *cli_port_max;
@@ -76,12 +81,12 @@ void sg_handler(int sig)
 		if (!Throughput) {
 			Throughput = 1;
 			block_flag = 0;
-			printf("\e[1;31mCLIENT: Switch Throughput mode on. block_flag=%d \e[0m\n", block_flag);
+			printf("\e[1;31mCLIENT: Switch Throughput mode on. SENDBUF = %d \e[0m\n", BUFFER_SIZE);
 		}
 		else {
 			Throughput = 0;
 			block_flag = 1;
-			printf("\e[1;31mCLIENT: Switch Throughput mode off. block_flag=%d \e[0m\n", block_flag);
+			printf("\e[1;31mCLIENT: Switch Throughput mode off. (block_flag = %d) \e[0m\n", block_flag);
 		}
 		fflush(NULL);
 	}
@@ -262,7 +267,7 @@ void *worker(void *addrstr)
 
 				while (Throughput) {
 					sendfd = travelqueue(&buf_state, &travel_p);
-					dprintf(2,"throughput send on fd = %d\n", sendfd);
+					//dprintf(2,"throughput send on fd = %d\n", sendfd);
 					if (sendfd < 0)
 						dprintf(2, "travelqueue error! \n");
 
@@ -332,15 +337,23 @@ void *worker(void *addrstr)
 
 void usage(char *argv[])
 {
-	printf(" Usage: %s -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s]\n", argv[0]);
+	printf("\n");
+	printf(" Usage: %s -H <serIp1[,serIp2,serIp3...]> -P <portMin-portMax> -h <cliIp1[,cliIp2,cliIp3...]> -p <portMin-portMax> [-t|-u|-s|-b <size>]\n", argv[0]);
 	printf(" -H	specify one or more server addresses, separate by ','\n");
+	printf(" -P	specify server port range, separate by '-'\n");
 	printf(" -h	specify one or more client addresses, separate by ','\n");
 	printf(" -p	specify client port range, separate by '-'\n");
-	printf(" -P	specify server port range, separate by '-'\n");
+	printf(" -b     set \"Throughput mode\" send BUFFER size(qual to the send size per call) Useful when you need to adjust the sending performance\n");
 	printf(" -t	TCP mode (default)\n");
 	printf(" -u	UDP mode\n");
-	printf(" -s	SCTP mode\n\n");
-	printf(" -c	close_soon: close connect soon, right after established\n\n");
+	printf(" -s	SCTP mode\n");
+	printf(" -c	set close_soon at start\n");
+	printf("\n");
+	printf(" Singals that support runtime configuration\n");
+	printf(" Close_Soon  on/off            kill -s %d <pid>`\n", (int)SIGUSR1);
+	printf(" Pause/Continue (block_flag)  `kill -s %d <pid>`\n", (int)SIGUSR2);
+	printf(" Throughput mode on/off       `kill -s %d <pid>`\n", (int)SIGRTMIN);
+	printf("\n");
 	printf("Example:\n");
 	printf("%s -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 10.0.2.101,10.0.2.102 -p 50001-60000\n", argv[0]);
 	printf("%s -t -H 2000::100,2000::101 -P 1001-1500 -h 2001::100,2001::101 -p 50001-60000\n", argv[0]);
@@ -409,6 +422,9 @@ int main(int argc, char *argv[])
 		case 'c':
 			close_soon = 1;
 			printf("\e[0;34mCLIENT: close soon is on\e[0m\n");
+			break;
+		case 'b':
+			BUFFER_SIZE = (size_t) atoi(optarg);
 			break;
 		default:
 			dprintf(2, "Invalid parameter\n");
