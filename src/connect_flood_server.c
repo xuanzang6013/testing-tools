@@ -55,7 +55,7 @@ static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t barrier;
 
-int *cnt_newp[MAX_TRD];
+int cnt_new[MAX_TRD];
 int cnt_closed[MAX_TRD];
 int ep_conns[MAX_TRD];
 uint64_t cnt_nbytes[MAX_TRD];
@@ -186,24 +186,8 @@ void *handle_peer_new(void *p)
 
 	int connfd, sockfd, len, s_port;
 	int ready, i, fd, max_listen, ep_lis;
-	int cnt = 0;
 	int enable = 1;
 	buff_t buf_state;
-
-	if (pthread_mutex_lock(&mtx) != 0) {
-		perror("pthread_mutex_lock");
-		exit(1);
-	}
-	for (i = 0; i < MAX_TRD; i++) {
-		if (cnt_newp[i])
-			continue;
-		cnt_newp[i] = &cnt;
-		break;
-	}
-	if (pthread_mutex_unlock(&mtx) != 0) {
-		perror("pthread_mutex_unlock");
-		exit(1);
-	}
 
 	/* this is a per thread instance */
 	if (create_queue(&buf_state) != 0) {
@@ -313,8 +297,8 @@ void *handle_peer_new(void *p)
 				}
 			}
 
-			if (++cnt >= MAX_FD) {
-				dprintf(2, "Too many fd %d == %d, exceed buffer\n", cnt, MAX_FD);
+			if (++cnt_new[thp->thd_seq] >= MAX_FD) {
+				dprintf(2, "Too many fd %d == %d, exceed buffer\n", cnt_new[thp->thd_seq], MAX_FD);
 				exit(1);
 			}
 
@@ -366,8 +350,8 @@ count_t cnt_add(void)
 	int i;
 	count_t val = {0};
 
-	for (i = 0; cnt_newp[i]; i++)
-		val.new += *cnt_newp[i];
+	for (i = 0; cnt_new[i]; i++)
+		val.new += cnt_new[i];
 
 	for (i = 0; cnt_closed[i]; i++)
 		val.closed += cnt_closed[i];

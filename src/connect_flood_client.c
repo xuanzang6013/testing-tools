@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			close_soon = 1;
-			printf("\e[0;34mCLIENT: close soon is on\e[0m\n");
+			printf("\e[0;31mCLIENT: close soon is on\e[0m\n");
 			break;
 		case 'b':
 			BUFFER_SIZE = (size_t) atoi(optarg);
