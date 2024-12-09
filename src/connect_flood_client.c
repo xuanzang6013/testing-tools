@@ -283,6 +283,7 @@ void *worker(void *addrstr)
 
 					while (1) {
 						ssize_t bytes_sent = send(sendfd, SNDBUF, BUFFER_SIZE, 0);
+						//dprintf (2,"%d bytes sent\n", bytes_sent);
 						if (bytes_sent < 0) {
 							if (errno == EAGAIN) {
 								//dprintf (2,"send EAGAIN: Resource temporarily unavailable\n");
@@ -296,7 +297,9 @@ void *worker(void *addrstr)
 								goto out_Throughput;
 							}
 						}
-						//dprintf (2,"%d bytes sent\n", bytes_sent);
+						/* UDP socket rarely return EAGAIN, so force use next fd */
+						if (proto == IS_UDP)
+							break;
 					}
 				}
 				out_Throughput:
@@ -412,6 +415,8 @@ int main(int argc, char *argv[])
 			sock_type = SOCK_DGRAM;
 			connect_func = udp_connect;
 			sock_protocol = IPPROTO_UDP;
+			/* assume MTU is 1500, to avoid fragment */
+			BUFFER_SIZE = 1472;
 			break;
 		case 's':
 			proto = IS_SCTP;
