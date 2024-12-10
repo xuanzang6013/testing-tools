@@ -37,11 +37,11 @@
 
 /* send buffer size default 128k */
 size_t BUFFER_SIZE = 0x20000;
+char udp_buf[100];
 
 char *ser_port_min;
 char *ser_port_max;
 int closing;
-int proto = IS_TCP;
 int sock_type = SOCK_STREAM;
 int sock_protocol;
 int Throughput;
@@ -80,13 +80,35 @@ void sg_handler(int sig)
 	}
 }
 
+int udp_close_passive(int fd)
+{
+	/* FIN already received when call this */
+	int nbytes;
+	if (send(fd, "ACK,UDPFIN", 10, 0) == -1) {
+		perror("SERVER: UDP FIN,ACK send");
+		return -1;
+	}
+
+	nbytes = recv(fd, udp_buf, sizeof(udp_buf), 0);
+	/* The length of "LASKACK" */
+	if (nbytes == 7) {
+		close(fd);
+		return 0;
+	}
+	else if (nbytes == -1) {
+		perror("SERVER: udp_close_passive recv error");
+	}
+	else
+		printf("warning: udp_close_passive, LASKACK didn't received\n");
+	return -1;
+}
+
 int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 {
 	int connfd = -1, flag = 1, mode;
-	char buf[1000];
 	struct sockaddr_storage localaddr;
 
-	if (recvfrom(sockfd, buf, sizeof(buf), 0, peeraddr, len) == -1) {
+	if (recvfrom(sockfd, udp_buf, sizeof(udp_buf), 0, peeraddr, len) == -1) {
 		perror("recvfrom");
 		return -1;
 	}
@@ -118,7 +140,7 @@ int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 	}
 
 	/* wait client to write back */
-	if (recv(connfd, buf, sizeof(buf), 0) == -1) {
+	if (recv(connfd, udp_buf, sizeof(udp_buf), 0) == -1) {
 		perror("SERVER: UDP read");
 		return -1;
 	}
@@ -157,13 +179,30 @@ void *handle_peer_close_or_send(void *p)
 			}
 			/* ready to recv */
 			else if (conn_evlist[i].events & EPOLLIN) {
-				Throughput = 1;
-				nbytes = recv(conn_evlist[i].data.fd, RECVBUF, BUFFER_SIZE, 0);
-				if (nbytes < 0) {
-					perror("recv failed");
+				/* handle udp close */
+				if (!Throughput && IS_UDP) {
+					nbytes = recv(conn_evlist[i].data.fd, RECVBUF, BUFFER_SIZE, 0);
+					/* The len of "UDPFIN" */
+					if (nbytes == 6) {
+						if (!udp_close_passive(conn_evlist[i].data.fd))
+							cnt_closed[thp->thd_seq]++;
+					}
+					else if (nbytes < 0)
+					{
+						perror("udp recv failed");
+					}
+					else
+						Throughput = 1;
 				}
-				cnt_nbytes[thp->thd_seq] += nbytes;
-				//dprintf(2, "%d bytes received\n", nbytes);
+				else {
+					Throughput = 1;
+					nbytes = recv(conn_evlist[i].data.fd, RECVBUF, BUFFER_SIZE, 0);
+					if (nbytes < 0) {
+						perror("recv failed");
+					}
+					cnt_nbytes[thp->thd_seq] += nbytes;
+					//dprintf(2, "%d bytes received\n", nbytes);
+				}
 			}
 			else {
 				if (conn_evlist[i].events & (EPOLLHUP | EPOLLERR)) {
@@ -383,6 +422,7 @@ int main(int argc, char *argv[])
 	char *ser_port_range = NULL;
 	char *ser_addrs = NULL;
 	char *ser_addr[MAX_TRD] = {0};
+	char *proto = "tcp";
 	int opt, i, s, num_threads, sysfd;
 	char nr_open[100] = {0};
 	ssize_t n;
@@ -412,19 +452,22 @@ int main(int argc, char *argv[])
 			//printf("server: ser_port_min = %s,ser_port_max = %s\n",ser_port_min, ser_port_max);
 			break;
 		case 't':
-			proto = IS_TCP;
+			proto = "tcp";
+			IS_TCP = 1;
 			sock_type = SOCK_STREAM;
 			accept_func = accept;
 			sock_protocol = IPPROTO_TCP;
 			break;
 		case 'u':
-			proto = IS_UDP;
+			proto = "udp";
+			IS_UDP = 1;
 			sock_type = SOCK_DGRAM;
 			accept_func = udp_accept;
 			sock_protocol = IPPROTO_UDP;
 			break;
 		case 's':
-			proto = IS_SCTP;
+			proto = "sctp";
+			IS_SCTP = 1;
 			sock_type = SOCK_STREAM;
 			accept_func = accept;
 			sock_protocol = IPPROTO_SCTP;
@@ -531,19 +574,9 @@ int main(int argc, char *argv[])
 			Throughput = 0;
 		}
 		else {
-			switch (proto) {
-			case IS_UDP:
-				printf("\e[0;32m%d udp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-				break;
-			case IS_TCP:
-				printf("\e[0;32m%d tcp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-				break;
-			case IS_SCTP:
-				printf("\e[0;32m%d sctp connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, aft.new - bef.new, aft.closed - bef.closed);
-				break;
-			}
-			fflush(NULL);
+			printf("\e[0;32m%d %s connections, %d cps (new) %d cps (closed)\e[0m\n", aft.new - aft.closed, proto, aft.new - bef.new, aft.closed - bef.closed);
 		}
+		fflush(NULL);
 	}
 
 	/* Wait all threads to finish */

@@ -48,11 +48,11 @@ char *cli_port_max;
 char *ser_port_min;
 char *ser_port_max;
 char *cli_addr[MAX_CLI_IP];
+char udpBuf[100];
 int close_soon;
 int block_flag;
 int num_cli_ip;
 sa_family_t addr_family;
-int proto = IS_TCP;
 int sock_protocol;
 int sock_type = SOCK_STREAM;
 int (*connect_func)(int sockfd, const struct sockaddr *s_addr, socklen_t len);
@@ -119,9 +119,33 @@ void *set_sockaddr(const char *addr, int port, struct sockaddr_storage *sockaddr
 	}
 }
 
+int udp_close_active(int fd)
+{
+	int nbytes;
+	if (send(fd, "UDPFIN", 6, 0) == -1) {
+		perror("udp_close_active: UDP send");
+		return -1;
+	}
+	nbytes = recv(fd, udpBuf, sizeof(udpBuf), 0);
+	/* The length of "ACK,UDPFIN" */
+	if (nbytes == 10) {
+		if (send(fd, "LASKACK", 7, 0) == -1) {
+			perror("udp_close_active: UDP send");
+			return -1;
+		}
+		close(fd);
+		return 0;
+	}
+	else if (nbytes == -1) {
+		perror("udp_close_active: UDP recv");
+	}
+	else
+		printf("warning: udp_close_active: ACK,UDPFIN didn't received\n");
+	return -1;
+}
+
 int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)
 {
-	char buf[100];
 	struct timeval tv = {
 		.tv_sec = 10
 	};
@@ -139,7 +163,7 @@ int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)
 		return -1;
 	}
 	/* Don't send too fast, wait server write back */
-	if (recv(sockfd, buf, sizeof(buf), 0) == -1) {
+	if (recv(sockfd, udpBuf, sizeof(udpBuf), 0) == -1) {
 		//perror("CLIENT: UDP recv");
 		return -1;
 	}
@@ -242,8 +266,13 @@ void *worker(void *addrstr)
 				}
 
 				if (close_soon) {
-					if (close(sockfd) == -1) {
-						perror("close_soon");
+					if (IS_UDP) {
+						if (udp_close_active(sockfd) == -1)
+							perror("udp_close_active");
+					}
+					else {
+						if (close(sockfd) == -1)
+							perror("close_soon");
 					}
 				}
 				else {
@@ -291,8 +320,8 @@ void *worker(void *addrstr)
 								goto out_Throughput;
 							}
 						}
-						/* UDP socket rarely return EAGAIN, so force use next fd */
-						if (proto == IS_UDP)
+						/* UDP socket rarely return EAGAIN, so force move to next fd */
+						if (IS_UDP)
 							break;
 					}
 				}
@@ -399,13 +428,13 @@ int main(int argc, char *argv[])
 			cli_port_max = (!cli_port_max) ? cli_port_min : cli_port_max;
 			break;
 		case 't':
-			proto = IS_TCP;
+			IS_TCP = 1;
 			sock_type = SOCK_STREAM;
 			connect_func = connect;
 			sock_protocol = IPPROTO_TCP;
 			break;
 		case 'u':
-			proto = IS_UDP;
+			IS_UDP = 1;
 			sock_type = SOCK_DGRAM;
 			connect_func = udp_connect;
 			sock_protocol = IPPROTO_UDP;
@@ -413,7 +442,7 @@ int main(int argc, char *argv[])
 			BUFFER_SIZE = 1472;
 			break;
 		case 's':
-			proto = IS_SCTP;
+			IS_SCTP = 1;
 			sock_type = SOCK_STREAM;
 			connect_func = connect;
 			sock_protocol = IPPROTO_SCTP;
@@ -492,12 +521,13 @@ int main(int argc, char *argv[])
 	fflush(NULL);
 	pthread_t threads[MAX_TRD];
 
-	for (num_ser_ip = 0; ser_addrs; num_ser_ip++) {
+	for (i = 0; ser_addrs; i++) {
 		if (pthread_create(&threads[i], NULL, (void *)worker, next_opt(&ser_addrs)) != 0)
 			perror("pthread_create");
 	}
+	num_ser_ip = i;
 
-	/* Wait all threads to join block the main() */
+	/* Wait all threads to join, block the main() */
 	for (i = 0; i < num_ser_ip; i++) {
 		if (pthread_join(threads[i], NULL) != 0)
 			perror("pthread_join");
