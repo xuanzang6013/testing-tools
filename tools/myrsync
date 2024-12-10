@@ -71,6 +71,7 @@ done
 user=${user:-root}
 path=${path:-$PWD/}
 
+
 if [[ -z $hosts && ! -e /tmp/$(basename $0).cfg ]];then
 	echo "hosts in \$1 can't empty"
 	exit 1
@@ -80,6 +81,11 @@ then
 else
 	hosts=`cat /tmp/myrsync.cfg`
 fi
+
+echo "user = $user"
+echo "host = $hosts"
+echo "path= $path"
+echo
 
 depth=0
 max_depth=5
@@ -168,9 +174,9 @@ cp_pub_key_to_remote()
 	ssh $user@$host "$remote_cmd"
 }
 
-cp_self_to_remote()
+cp_tools_to_remote()
 {
-	echo "Cp $(basename $0) to remote ~/.local/bin"
+	echo "Cp tools to remote ~/.local/bin"
 
 	# remote: add ~/.local/bin to $PATH
 	cat <<-EOF | ssh $user@$host bash
@@ -187,7 +193,7 @@ cp_self_to_remote()
 
 	# scp this file to remote host
 	self_path=$(realpath $0)
-	scp $self_path $user@$host:~/.local/bin/ > /dev/null || exit 1
+	scp $self_path $(which kexecreboot) $(which kernel_install) $user@$host:~/.local/bin/ > /dev/null || exit 1
 }
 
 if [ -n "$_target" ];then
@@ -202,10 +208,6 @@ if [ -n "$_target" ];then
 fi
 
 for host in $hosts;do
-	echo host= $host
-	echo user= $user
-	echo ""
-
 	for t in {1..4};do
 		sed -in /$host/d ~/.ssh/known_hosts
 		rsync --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts=0" -o StrictHostKeyChecking=no' $path $user@$host:$path 2>/dev/null && break
@@ -220,10 +222,12 @@ for host in $hosts;do
 		elif [ $ret == 255 ];then
 			echo "Cp pub key to remote authorized_keys"
 			cp_pub_key_to_remote
-			#cp_self_to_remote
+			cp_tools_to_remote
 		elif [ $ret == 3 ];then
-			path=$(dirname $path)/
-			echo "remote path doesn't exist, sync all files under the path: $path"
+			echo "Remote: mkdir -p $path"
+			ssh $user@$host "mkdir -p $path"
+			#path=$(dirname $path)/
+			#echo "remote path doesn't exist, cp the whole directory: $path"
 		elif [ $ret == 20 ];then
 			echo -e "\nInterrupted by Ctrl+C exit..."
 			exit 0
