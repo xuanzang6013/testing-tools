@@ -71,7 +71,6 @@ done
 user=${user:-root}
 path=${path:-$PWD/}
 
-
 if [[ -z $hosts && ! -e /tmp/$(basename $0).cfg ]];then
 	echo "hosts in \$1 can't empty"
 	exit 1
@@ -106,7 +105,6 @@ _do_sync()
 		fi
 	done
 
-
 	for relative_path in $@
 	do
 		sync_path=${prefix}/${relative_path}/
@@ -135,7 +133,6 @@ _do_sync()
 			fi
 		popd
 	done
-
 }
 
 cp_dependency_accrodingto_metadata()
@@ -224,9 +221,8 @@ for host in $hosts;do
 			cp_pub_key_to_remote
 			cp_tools_to_remote
 		elif [ $ret == 3 ];then
-			path=$(dirname $path)/
-			echo "Remote: mkdir -p $path"
-			ssh $user@$host "mkdir -p $path"
+			echo "Remote: mkdir -p $(dirname $path)/"
+			ssh $user@$host "mkdir -p $(dirname $path)/"
 		elif [ $ret == 20 ];then
 			echo -e "\nInterrupted by Ctrl+C exit..."
 			exit 0
