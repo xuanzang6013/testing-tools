@@ -65,7 +65,10 @@ void sg_handler(int sig)
 	int i;
 	if (sig == SIGUSR1) {
 		close_soon = (close_soon) ? 0 : 1;
-		printf("\e[1;31mCLIENT: close_soon = %d \e[0m\n", close_soon);
+		if (close_soon)
+			printf("\e[1;31mCLIENT: Switch on Close_soon mode\e[0m\n");
+		else
+			printf("\e[1;31mCLIENT: Switch off Close_soon mode\e[0m\n");
 	}
 	if (sig == SIGUSR2) {
 		block_flag = (block_flag) ? 0 : 1;
@@ -78,11 +81,11 @@ void sg_handler(int sig)
 		Throughput = (Throughput) ? 0 : 1;
 		if (Throughput) {
 			block_flag = 0;
-			printf("\e[1;31mCLIENT: Switch Throughput mode on. SENDBUF = %d \e[0m\n", BUFFER_SIZE);
+			printf("\e[1;31mCLIENT: Switch to Throughput mode. SENDBUF = %d, (set by the '-b' option)\e[0m\n", BUFFER_SIZE);
 		}
 		else {
 			block_flag = 1;
-			printf("\e[1;31mCLIENT: Switch Throughput mode off. Pausing...\e[0m\n");
+			printf("\e[1;31mCLIENT: Switch off Throughput mode. Pausing...\e[0m\n");
 		}
 	}
 	if (sig == SIGRTMIN + 1) {
@@ -92,7 +95,7 @@ void sg_handler(int sig)
 		}
 		block_flag = 0;
 		Throughput = 0;
-		printf("\e[1;31mCLIENT: closing all connections...\e[0m\n");
+		printf("\e[1;31mCLIENT: Closing all connections...\e[0m\n");
 	}
 	fflush(NULL);
 }
@@ -131,6 +134,7 @@ void *set_sockaddr(const char *addr, int port, struct sockaddr_storage *sockaddr
 
 int udp_close_active(int fd)
 {
+	/* active close: Send the "FIN" first */
 	int nbytes;
 	if (send(fd, "UDPFIN", 6, 0) == -1) {
 		perror("udp_close_active: UDP send");
@@ -308,7 +312,7 @@ void *worker(void *p)
 				while (close_all) {
 					fd = dequeue(&buf_state);
 					if (fd == -1) {
-						dprintf(2,"dequeue empty\n");
+						//dprintf(2,"dequeue empty\n");
 						close_all = 0;
 						block_flag = 1;
 						/* Judge all threads finished closing */
@@ -417,9 +421,10 @@ void usage(char *argv[])
 	printf(" -c	set close_soon at start\n");
 	printf("\n");
 	printf(" Singals that support runtime configuration\n");
-	printf(" Close_Soon  on/off            kill -s %d <pid>`\n", (int)SIGUSR1);
-	printf(" Pause/Continue (block_flag)  `kill -s %d <pid>`\n", (int)SIGUSR2);
+	printf(" Close all connections         kill -s %d <pid>`\n", (int)(SIGRTMIN + 1));
+	printf(" Close soon  on/off            kill -s %d <pid>`\n", (int)SIGUSR1);
 	printf(" Throughput mode on/off       `kill -s %d <pid>`\n", (int)SIGRTMIN);
+	printf(" Pause/Continue (block_flag)  `kill -s %d <pid>`\n", (int)SIGUSR2);
 	printf("\n");
 	printf("Example:\n");
 	printf("%s -t -H 10.0.1.100,10.0.1.101,10.0.1.102 -P 1001-1500 -h 10.0.2.101,10.0.2.102 -p 50001-60000\n", argv[0]);
@@ -563,10 +568,10 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf("\e[0;34mCLIENT: Close soon on/off            `kill -s %d %d` \e[0m\n", (int)SIGUSR1, (int)getpid());
 	printf("\e[0;34mCLIENT: Close All                    `kill -s %d %d` \e[0m\n", (int)(SIGRTMIN + 1), (int)getpid());
-	printf("\e[0;34mCLIENT: Pause/Continue               `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
+	printf("\e[0;34mCLIENT: Close soon on/off            `kill -s %d %d` \e[0m\n", (int)SIGUSR1, (int)getpid());
 	printf("\e[0;34mCLIENT: Throughput mode on/off       `kill -s %d %d` \e[0m\n", (int)SIGRTMIN, (int)getpid());
+	printf("\e[0;34mCLIENT: Pause/Continue               `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
 	fflush(NULL);
 
 	pthread_t threads[MAX_TRD];
