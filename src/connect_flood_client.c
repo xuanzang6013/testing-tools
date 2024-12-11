@@ -50,6 +50,7 @@ char *ser_port_max;
 char *cli_addr[MAX_CLI_IP];
 char udpBuf[100];
 int close_soon;
+int *_close_all[MAX_TRD];
 int block_flag;
 int num_cli_ip;
 sa_family_t addr_family;
@@ -61,30 +62,39 @@ int Throughput;
 
 void sg_handler(int sig)
 {
+	int i;
 	if (sig == SIGUSR1) {
 		close_soon = (close_soon) ? 0 : 1;
 		printf("\e[1;31mCLIENT: close_soon = %d \e[0m\n", close_soon);
-		fflush(NULL);
-		return;
 	}
 	if (sig == SIGUSR2) {
 		block_flag = (block_flag) ? 0 : 1;
-		printf("\e[1;31mCLIENT: block_flag = %d \e[0m\n", block_flag);
-		fflush(NULL);
+		if (block_flag)
+			printf("\e[1;31mCLIENT: Pausing...\e[0m\n");
+		else
+			printf("\e[1;31mCLIENT: Continue...\e[0m\n");
 	}
 	if (sig == SIGRTMIN) {
-		if (!Throughput) {
-			Throughput = 1;
+		Throughput = (Throughput) ? 0 : 1;
+		if (Throughput) {
 			block_flag = 0;
 			printf("\e[1;31mCLIENT: Switch Throughput mode on. SENDBUF = %d \e[0m\n", BUFFER_SIZE);
 		}
 		else {
-			Throughput = 0;
 			block_flag = 1;
-			printf("\e[1;31mCLIENT: Switch Throughput mode off. (block_flag = %d) \e[0m\n", block_flag);
+			printf("\e[1;31mCLIENT: Switch Throughput mode off. Pausing...\e[0m\n");
 		}
-		fflush(NULL);
 	}
+	if (sig == SIGRTMIN + 1) {
+		/* Tell all threads close their connections */
+		for (i = 0; _close_all[i]; i++) {
+			*_close_all[i] = 1;
+		}
+		block_flag = 0;
+		Throughput = 0;
+		printf("\e[1;31mCLIENT: closing all connections...\e[0m\n");
+	}
+	fflush(NULL);
 }
 
 void *set_sockaddr(const char *addr, int port, struct sockaddr_storage *sockaddr)
@@ -188,11 +198,18 @@ void fill_buf(char* buffer)
 	}
 }
 
-void *worker(void *addrstr)
+void *worker(void *p)
 {
-	int sockfd, s_port, c_port, i, sendfd, ready, epfd, enable;
-	int * travel_p = NULL;
+	thdp_t *thp = (thdp_t *)p;
+	char * addrstr = thp->addrp;
+
 	buff_t buf_state;
+	int fd, sockfd, sendfd, epfd;
+	int s_port, c_port;
+	int i, ready, enable, close_all = 0, close_flag_sum = 0;
+	int * travel_p = NULL;
+
+	_close_all[thp->thd_seq]= &close_all;
 
 	/* create epoll instance */
 	int num_ser_port = atoi(ser_port_max) - atoi(ser_port_min) + 1;
@@ -212,7 +229,7 @@ void *worker(void *addrstr)
 	/* Only interested in close events */
 	ev.events = EPOLLRDHUP;
 
-	/* this is per thread instance */
+	/* this is a per thread instance */
 	if (create_queue(&buf_state) != 0) {
 		dprintf(2, "calloc failed\n");
 		exit(1);
@@ -288,6 +305,30 @@ void *worker(void *addrstr)
 					}
 				}
 
+				while (close_all) {
+					fd = dequeue(&buf_state);
+					if (fd == -1) {
+						dprintf(2,"dequeue empty\n");
+						close_all = 0;
+						block_flag = 1;
+						/* Judge all threads finished closing */
+						for (i = 0; _close_all[i]; i++) {
+							close_flag_sum += *_close_all[i];
+						}
+						if (!close_flag_sum)
+							printf("\e[1;31mCLIENT: All closed. Pausing...\e[0m\n");
+						break;
+					}
+					if (IS_UDP) {
+						if (udp_close_active(fd) == -1)
+							perror("udp_close_active");
+					}
+					else {
+						if (close(fd) == -1)
+							perror("client close:");
+					}
+				}
+
 				while (Throughput) {
 					sendfd = travelqueue(&buf_state, &travel_p);
 					//dprintf(2,"throughput send on fd = %d\n", sendfd);
@@ -316,7 +357,7 @@ void *worker(void *addrstr)
 								perror("send failed exit Thoughput mode");
 								printf("sendfd = %d\n", sendfd);
 								block_flag = 1;
-								printf("\e[1;31mCLIENT:block_flag = %d \e[0m\n", block_flag);
+								printf("\e[1;31mCLIENT: Pausing \e[0m\n");
 								goto out_Throughput;
 							}
 						}
@@ -390,9 +431,10 @@ int main(int argc, char *argv[])
 	char *cli_port_range = NULL;
 	char *ser_port_range = NULL;
 	char *ser_addrs = NULL;
+	char *ser_addr[MAX_TRD] = {0};
 	char *cli_addrs = NULL;
 	ssize_t n;
-	int opt, i, sysfd, num_ser_ip;
+	int opt, i, sysfd, num_threads;
 	char nr_open[100] = {0};
 
 	if (argc < 2) {
@@ -405,6 +447,9 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'H':
 			ser_addrs = optarg;
+			for (i = 0; ser_addrs; i++)
+				ser_addr[i] = next_opt(&ser_addrs);
+			num_threads = i;
 			break;
 		case 'h':
 			cli_addrs = optarg;
@@ -513,23 +558,33 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	if (sigaction(SIGRTMIN + 1, &sa, NULL) != 0) {
+		perror("sigaction, SIGRTMIN+1");
+		exit(1);
+	}
+
 	printf("\e[0;34mCLIENT: Close soon on/off            `kill -s %d %d` \e[0m\n", (int)SIGUSR1, (int)getpid());
-	printf("\e[0;34mCLIENT: Pause/Continue (block_flag)  `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
+	printf("\e[0;34mCLIENT: Close All                    `kill -s %d %d` \e[0m\n", (int)(SIGRTMIN + 1), (int)getpid());
+	printf("\e[0;34mCLIENT: Pause/Continue               `kill -s %d %d` \e[0m\n", (int)SIGUSR2, (int)getpid());
 	printf("\e[0;34mCLIENT: Throughput mode on/off       `kill -s %d %d` \e[0m\n", (int)SIGRTMIN, (int)getpid());
-
-
 	fflush(NULL);
-	pthread_t threads[MAX_TRD];
 
-	for (i = 0; ser_addrs; i++) {
-		if (pthread_create(&threads[i], NULL, (void *)worker, next_opt(&ser_addrs)) != 0)
+	pthread_t threads[MAX_TRD];
+	thdp_t thdp[MAX_TRD];
+
+	for (i = 0; i < num_threads; i++) {
+		thdp[i].addrp = ser_addr[i];
+		thdp[i].thd_seq = i;
+
+		if (pthread_create(&threads[i], NULL, (void *)worker, &thdp[i]) != 0)
 			perror("pthread_create");
 	}
-	num_ser_ip = i;
 
 	/* Wait all threads to join, block the main() */
-	for (i = 0; i < num_ser_ip; i++) {
+	for (i = 0; i < num_threads; i++) {
 		if (pthread_join(threads[i], NULL) != 0)
 			perror("pthread_join");
 	}
+
+	printf("CLIENT exit, Bye!\n");
 }

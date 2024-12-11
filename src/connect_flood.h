@@ -18,6 +18,12 @@ typedef struct buff_state {
 	int *end;
 } buff_t;
 
+typedef struct thread_param {
+	char *addrp;
+	/* thread sequence */
+	int thd_seq;
+} thdp_t;
+
 int create_queue(buff_t *st)
 {
 	int *stor;

@@ -41,7 +41,7 @@ char udp_buf[100];
 
 char *ser_port_min;
 char *ser_port_max;
-int closing;
+int close_all;
 int sock_type = SOCK_STREAM;
 int sock_protocol;
 int Throughput;
@@ -62,20 +62,14 @@ typedef struct count {
 	uint64_t nbytes;
 } count_t;
 
-typedef struct thread_param {
-	char *addrp;
-	/* thread sequence */
-	int thd_seq;
-} thdp_t;
-
 int (*accept_func)(int fd, struct sockaddr *peeraddr, socklen_t *addrlen);
 
 
 void sg_handler(int sig)
 {
 	if (sig == SIGUSR1) {
-		closing = (closing) ? 0 : 1;
-		printf("\e[1;31mSERVER:closing all= %d \e[0m\n", closing);
+		close_all = (close_all) ? 0 : 1;
+		printf("\e[1;31mSERVER:close_all all= %d \e[0m\n", close_all);
 		fflush(NULL);
 	}
 }
@@ -350,7 +344,7 @@ void *handle_peer_new(void *p)
 			}
 		}
 
-		while (closing) {
+		while (close_all) {
 			fd = dequeue(&buf_state);
 			if (fd == -1) {
 				//dprintf(2,"dequeue fail, empty\n");
