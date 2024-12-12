@@ -196,7 +196,7 @@ cp_tools_to_remote()
 if [ -n "$_target" ];then
 	host=$(echo $hosts | awk '{print $1}')
 	echo "cp $_target from $host"
-	rsync -av ${user:-root}@${host}:${_target} ${_target}
+	rsync -av ${user:-root}@${host}:${_target} $(dirname ${_target})
 	ret=$?
 	if [ $ret == 23 ];then
 		echo "Remote $_target path doesn't exists"
