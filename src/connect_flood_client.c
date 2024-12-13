@@ -197,6 +197,7 @@ void fill_buf(char* buffer)
 	len = strlen(payload);
 	repeat = sizeof(buffer) / len;
 
+	memset(buffer, 0, sizeof(buffer));
 	for(i = 0; i < repeat; i++) {
 		memcpy(buffer + (i * len), payload, len);
 	}
@@ -221,7 +222,7 @@ void *worker(void *p)
 	int max_events = 100000;
 	struct epoll_event ev;
 	struct epoll_event evlist[max_events];
-	char SNDBUF[BUFFER_SIZE] = {};
+	char SNDBUF[BUFFER_SIZE];
 	fill_buf(SNDBUF);
 
 	epfd = epoll_create(5);
