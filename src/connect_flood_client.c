@@ -512,6 +512,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// connect_func default
+	if (!connect_func)
+		connect_func = connect;
+
 	sysfd = open("/proc/sys/fs/nr_open", O_RDONLY);
 	if (sysfd < 1)
 		perror("open /proc/sys/fs/nr_open");
