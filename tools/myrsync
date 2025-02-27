@@ -211,7 +211,12 @@ for host in $hosts;do
 		ret=$?
 		if [ $ret == 12 ];then
 			echo "Remote: yum -y install rsync"
-			ssh $user@$host "yum -y install rsync"
+			ssh $user@$host "
+			if stat /run/ostree-booted > /dev/null 2>&1; then
+				rpm-ostree -A --assumeyes --idempotent --allow-inactive install rsync
+			else
+				dnf install -y rsync
+			fi"
 		elif [ $ret == 11 ];then
 			echo "Remote: mkdir -p $path"
 			ssh $user@$host "mkdir -p $path"
