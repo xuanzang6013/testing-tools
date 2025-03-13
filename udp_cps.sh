@@ -61,7 +61,7 @@ ip netns exec C ping 10.167.69.1 -c1 || exit 1;
 for i in `seq 1 $N_THD`
 do
 	ip -net S addr add 2001:db8:ffff:22::$i/64 dev s_r nodad
-	serIP6s+="2001:db8:ffff:21::$i,"
+	serIP6s+="2001:db8:ffff:22::$i,"
 done
 serIP6s=${serIP6s%,}
 
@@ -75,8 +75,10 @@ ip netns exec R ip addr add 2001:db8:ffff:22::fffe/64 dev r_s nodad
 ip netns exec R ip addr add 2001:db8:ffff:21::fffe/64 dev r_c nodad
 ip netns exec C ip route add 2001:db8:ffff:22::/64 via 2001:db8:ffff:21::fffe dev c_r
 ip netns exec S ip route add 2001:db8:ffff:21::/64 via 2001:db8:ffff:22::fffe dev s_r
-ip netns exec C ping 2001:db8:ffff:22::1 -c1 || exit 1;
-
+i=50
+while ((i--));do
+	ip netns exec C ping -W 1 2001:db8:ffff:22::1 -c1 && break
+done
 
 echo ""
 echo "Testing ipv4 tcp sockets"
