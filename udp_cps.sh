@@ -3,8 +3,11 @@
 # compare the new established CPS (connections per second)
 # of TCP and UDP.
 
-# Set the number of threads to use.
+# Set the number of threads to use.(The same as number of server addrs)
 N_THD=${N_THD:-3}
+
+# Set the number of client addrs to use.
+N_cli_addr=${N_cli_addr:-3}
 #==========================================
 
 cleanup()
@@ -45,9 +48,12 @@ done
 serIP4s=${serIP4s%,}
 
 # client ip
-ip netns exec C ip addr add 10.167.68.1/24 dev c_r
-ip netns exec C ip addr add 10.167.68.2/24 dev c_r
-ip netns exec C ip addr add 10.167.68.3/24 dev c_r
+for i in `seq 1 ${N_cli_addr}`
+do
+	ip -net C addr add 10.167.68.$i/24 dev c_r
+	cliIP4s+="10.167.68.$i,"
+done
+cliIP4s=${cliIP4s%,}
 
 ip netns exec R sysctl -w net.ipv4.conf.all.forwarding=1
 ip netns exec R ip addr add 10.167.69.254/24 dev r_s
@@ -66,9 +72,12 @@ done
 serIP6s=${serIP6s%,}
 
 # client ip
-ip netns exec C ip addr add 2001:db8:ffff:21::1/64 dev c_r nodad
-ip netns exec C ip addr add 2001:db8:ffff:21::2/64 dev c_r nodad
-ip netns exec C ip addr add 2001:db8:ffff:21::3/64 dev c_r nodad
+for i in `seq 1 ${N_cli_addr}`
+do
+	ip -net C addr add 2001:db8:ffff:21::$i/64 dev c_r nodad
+	cliIP6s+="2001:db8:ffff:21::$i,"
+done
+cliIP6s=${cliIP6s%,}
 
 ip netns exec R sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec R ip addr add 2001:db8:ffff:22::fffe/64 dev r_s nodad
@@ -77,7 +86,10 @@ ip netns exec C ip route add 2001:db8:ffff:22::/64 via 2001:db8:ffff:21::fffe de
 ip netns exec S ip route add 2001:db8:ffff:21::/64 via 2001:db8:ffff:22::fffe dev s_r
 i=50
 while ((i--));do
-	ip netns exec C ping -W 1 2001:db8:ffff:22::1 -c1 && break
+	ip netns exec C ping -W 1 2001:db8:ffff:22::1 -c1 > /dev/null && {
+		ip netns exec C ping -W 1 2001:db8:ffff:22::1 -c1
+		break
+	}
 done
 
 echo ""
@@ -85,7 +97,7 @@ echo "Testing ipv4 tcp sockets"
 ip netns exec S timeout 21 connect_flood_server -t -H ${serIP4s} -P 10000-10010 &
 sleep 1
 ip netns exec C timeout 20 connect_flood_client -t -H ${serIP4s} -P 10000-10010 \
-		-h 10.167.68.1,10.167.68.2,10.167.68.3 -p 10000-60000 &
+		-h ${cliIP4s} -p 10000-60000 &
 wait
 
 echo ""
@@ -93,7 +105,7 @@ echo "Testing ipv4 udp sockets"
 ip netns exec S timeout 21 connect_flood_server -u -H ${serIP4s} -P 10000-10010 &
 sleep 1
 ip netns exec C timeout 20 connect_flood_client -u -H ${serIP4s} -P 10000-10010 \
-		-h 10.167.68.1,10.167.68.2,10.167.68.3 -p 10000-60000 &
+		-h ${cliIP4s} -p 10000-60000 &
 wait
 
 echo ""
@@ -101,7 +113,7 @@ echo "Testing ipv6 tcp sockets"
 ip netns exec S timeout 21 connect_flood_server -t -H ${serIP6s} -P 10000-10010 &
 sleep 1
 ip netns exec C timeout 20 connect_flood_client -t -H ${serIP6s} -P 10000-10010 \
-		-h 2001:db8:ffff:21::1,2001:db8:ffff:21::2,2001:db8:ffff:21::3 -p 10000-60000 &
+		-h ${cliIP6s} -p 10000-60000 &
 wait
 
 echo ""
@@ -109,5 +121,5 @@ echo "Testing ipv6 udp sockets"
 ip netns exec S timeout 21 connect_flood_server -u -H ${serIP6s} -P 10000-10010 &
 sleep 1
 ip netns exec C timeout 20 connect_flood_client -u -H ${serIP6s} -P 10000-10010 \
-		-h 2001:db8:ffff:21::1,2001:db8:ffff:21::2,2001:db8:ffff:21::3 -p 10000-60000 &
+		-h ${cliIP6s} -p 10000-60000 &
 wait
