@@ -97,6 +97,10 @@ int udp_close_passive(int fd)
 	return -1;
 }
 
+struct timeval tv = {
+        .tv_sec = 1
+};
+
 int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 {
 	int connfd = -1, flag = 1, mode;
@@ -111,6 +115,12 @@ int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
 		perror("socket");
 		return -1;
 	}
+
+	if (setsockopt(connfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+		perror("setsockopt");
+		return -1;
+	}
+
 	if (getsockname(sockfd, (struct sockaddr *)&localaddr, len) == -1) {
 		perror("getsockname");
 		return -1;
@@ -317,7 +327,7 @@ void *handle_peer_new(void *p)
 				connfd = (*accept_func)(evlist[i].data.fd, (struct sockaddr *)&peeraddr, &addrlen);
 				if (connfd == -1) {
 					perror("accept");
-					exit(1);
+					continue;
 				}
 			} else {
 				if (evlist[i].events & (EPOLLHUP | EPOLLERR)) {

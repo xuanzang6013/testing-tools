@@ -158,14 +158,15 @@ int udp_close_active(int fd)
 	return -1;
 }
 
+struct timeval tv = {
+	.tv_sec = 1
+};
+
 int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)
 {
-	struct timeval tv = {
-		.tv_sec = 10
-	};
 	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
 		perror("setsockopt");
-		exit(1);
+		return -1;
 	}
 	if (connect(sockfd, addr, len) == -1) {
 		perror("connect");
