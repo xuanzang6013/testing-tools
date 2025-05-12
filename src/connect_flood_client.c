@@ -159,7 +159,8 @@ int udp_close_active(int fd)
 }
 
 struct timeval tv = {
-	.tv_sec = 1
+	.tv_sec = 1,
+	.tv_usec = 300000
 };
 
 int udp_connect(int sockfd, const struct sockaddr *addr, socklen_t len)

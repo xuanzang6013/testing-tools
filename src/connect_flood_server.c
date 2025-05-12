@@ -98,7 +98,8 @@ int udp_close_passive(int fd)
 }
 
 struct timeval tv = {
-        .tv_sec = 1
+	.tv_sec = 0,
+	.tv_usec = 300000
 };
 
 int udp_accept(int sockfd, struct sockaddr *peeraddr, socklen_t *len)
