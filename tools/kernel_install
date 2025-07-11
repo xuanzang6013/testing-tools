@@ -101,6 +101,9 @@ wget -nv --no-check-certificate $prefix/${name}-core-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-extra-${version}.${arch}.rpm &
 wget -nv --no-check-certificate $prefix/${name}-modules-internal-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-headers-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-tools-${version}.${arch}.rpm &
+wget -nv --no-check-certificate $prefix/${name}-tools-libs-${version}.${arch}.rpm &
 wget --no-check-certificate --spider --quiet --tries=1 $prefix/${name}-modules-core-${version}.${arch}.rpm && {
 	wget -nv --no-check-certificate $prefix/${name}-modules-core-${version}.${arch}.rpm &
 }
@@ -110,6 +113,3 @@ wget --no-check-certificate --spider --quiet --tries=1 $prefix/kernel-selftests-
 wait
 
 yum -y localinstall ${name}*${version}.${arch}.rpm || exit 1
-yum -y localinstall kernel-selftests-internal-${version}.${arch}.rpm
-
-
