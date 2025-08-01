@@ -90,7 +90,7 @@ echo f1=$f1
 echo f2=$f2
 echo f3=$f3
 
-prefix="https://download-node-02.eng.bos.redhat.com/brewroot/packages/$f1/$f2/$f3/$arch/"
+prefix="https://download.devel.redhat.com/brewroot/packages/$f1/$f2/$f3/$arch/"
 wget --no-check-certificate --spider --tries=1 $prefix/${name}-${version}.${arch}.rpm || {
 	echo "url uncorrect exit ..."
 	exit 1
