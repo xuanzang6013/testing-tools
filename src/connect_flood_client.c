@@ -136,9 +136,10 @@ int udp_close_active(int fd)
 {
 	/* active close: Send the "FIN" first */
 	int nbytes;
+	retry:
 	if (send(fd, "UDPFIN", 6, 0) == -1) {
 		perror("udp_close_active: UDP send");
-		return -1;
+		goto retry;
 	}
 	nbytes = recv(fd, udpBuf, sizeof(udpBuf), 0);
 	/* The length of "ACK,UDPFIN" */
@@ -152,6 +153,7 @@ int udp_close_active(int fd)
 	}
 	else if (nbytes == -1) {
 		perror("udp_close_active: UDP recv");
+		goto retry;
 	}
 	else
 		printf("warning: udp_close_active: ACK,UDPFIN didn't received\n");
