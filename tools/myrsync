@@ -148,6 +148,9 @@ cp_dependency_accrodingto_metadata()
 
 cp_pub_key_to_remote()
 {
+	if [ ! -e ~/.ssh/id_rsa.pub ]; then
+		yes "" | ssh-keygen -N ''
+	fi
 	# awk get last not empty line
 	pub_key=$(awk 'NF{s=$0}END{print s}' ~/.ssh/id_rsa.pub)
 
