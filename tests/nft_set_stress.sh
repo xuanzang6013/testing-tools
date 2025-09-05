@@ -99,8 +99,8 @@ dynamic_1ms_stress()
 	cliIPs=10.167.2.1,10.167.2.2,10.167.2.3,10.167.2.4,10.167.2.5
 	cliPorts=10000-60000
 	set -x
-	ip netns exec S timeout $t /usr/local/bin/connect_flood_server -t -H $serIPs -P $serPorts &
-	ip netns exec C timeout $t /usr/local/bin/connect_flood_client -t -H $serIPs -P $serPorts -h $cliIPs -p $cliPorts &
+	ip netns exec S timeout $t connect_flood_server -t -H $serIPs -P $serPorts &
+	ip netns exec C timeout $t connect_flood_client -t -H $serIPs -P $serPorts -h $cliIPs -p $cliPorts &
 	set +x
 
 	# ipv6
@@ -109,8 +109,8 @@ dynamic_1ms_stress()
 	cliIPs=2001:db8:ffff:2::1,2001:db8:ffff:2::2,2001:db8:ffff:2::3,2001:db8:ffff:2::4,2001:db8:ffff:2::5
 	cliPorts=10000-60000
 	set -x
-	ip netns exec S timeout $t /usr/local/bin/connect_flood_server -t -H $serIPs -P $serPorts &
-	ip netns exec C timeout $t /usr/local/bin/connect_flood_client -t -H $serIPs -P $serPorts -h $cliIPs -p $cliPorts &
+	ip netns exec S timeout $t connect_flood_server -t -H $serIPs -P $serPorts &
+	ip netns exec C timeout $t connect_flood_client -t -H $serIPs -P $serPorts -h $cliIPs -p $cliPorts &
 	set +x
 
 	wait
