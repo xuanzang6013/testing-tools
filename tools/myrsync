@@ -68,8 +68,21 @@ until [ -z $1 ]; do
 	esac
 done
 
+
+
 user=${user:-root}
 path=${path:-$PWD/}
+
+if ! rsync -h > /dev/null; then
+	echo "rsync tool doesn't exist"
+	exit 1
+elif rsync -h |grep -q mkpath; then
+	# rsync support --mkpath option since RHEL9
+	mkpath="--mkpath"
+else
+	unset mkpath
+fi
+
 
 if [[ -z $hosts && ! -e /tmp/$(basename $0).cfg ]];then
 	echo "hosts in \$1 can't empty"
@@ -82,7 +95,7 @@ else
 fi
 
 echo "user = $user"
-echo "host = $hosts"
+echo "hosts = $hosts"
 echo "path= $path"
 echo
 
@@ -111,16 +124,16 @@ _do_sync()
 		echo "rsync dependency lib path: ${sync_path}"
 		Synced+="${sync_path}\n"
 
-		#rsync -r --mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} || {
-		rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
-		if [ $ret == 11 ];then
-			echo "Remote: mkdir -p ${sync_path}"
-			ssh $user@$host "mkdir -p ${sync_path}"
-			rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
-		else
-			echo "sync repoRequires path fail: ${sync_path}"
-			exit 1
-		fi
+		rsync -r $mkpath -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path} 2> /dev/null || {
+			if [ $? == 11 ];then
+				# rsync doesn't support "--mkpath" option
+				echo "Remote: mkdir -p ${sync_path}"
+				ssh $user@$host "mkdir -p ${sync_path}"
+				rsync -r -e 'ssh -o "NumberOfPasswordPrompts 0"' ${sync_path} $user@$host:${sync_path}
+			else
+				echo "sync repoRequires path fail: ${sync_path}"
+				exit 1
+			fi
 		}
 		pushd $sync_path
 			((depth++))
@@ -130,6 +143,7 @@ _do_sync()
 				cp_dependency_accrodingto_metadata
 			else
 				echo "Too much dependencies? loop?"
+				exit 1
 			fi
 		popd
 	done
@@ -156,6 +170,10 @@ cp_pub_key_to_remote()
 
 	# command execute on remote side
 	remote_cmd="
+	test -e ~/.ssh/authorized_keys || {
+		mkdir -p ~/.ssh
+		touch ~/.ssh/authorized_keys
+	}
 	grep -q \"${pub_key}\" ~/.ssh/authorized_keys || {
 		echo \"${pub_key}\" >> ~/.ssh/authorized_keys
 	}
@@ -196,6 +214,8 @@ cp_tools_to_remote()
 	scp $self_path $(which kexecreboot) $(which kernel_install) $user@$host:~/.local/bin/ > /dev/null || exit 1
 }
 
+
+
 if [ -n "$_target" ];then
 	host=$(echo $hosts | awk '{print $1}')
 	echo "cp $_target from $host"
@@ -210,32 +230,35 @@ fi
 for host in $hosts;do
 	for t in {1..4};do
 		sed -in /$host/d ~/.ssh/known_hosts
+		#rsync $mkpath --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts=0" -o StrictHostKeyChecking=no' $path $user@$host:$path 2>/dev/null && break
 		rsync --human-readable --progress -r -l -e 'ssh -o "NumberOfPasswordPrompts=0" -o StrictHostKeyChecking=no' $path $user@$host:$path 2>/dev/null && break
 		ret=$?
 		if [ $ret == 12 ];then
-			echo "Remote: yum -y install rsync"
+			echo "Remote: yum -y install rsync vim"
 			ssh $user@$host "
 			if stat /run/ostree-booted > /dev/null 2>&1; then
-				rpm-ostree -A --assumeyes --idempotent --allow-inactive install rsync
+				rpm-ostree -A --assumeyes --idempotent --allow-inactive install rsync wget
 			else
-				dnf install -y rsync
+				dnf -y install rsync wget
+				dnf -y install beakerlib
 			fi"
 		elif [ $ret == 11 ];then
-			echo "Remote: mkdir -p $path"
+			echo "return 11, Remote: mkdir -p $path"
+			cp_dependency_accrodingto_metadata &
 			ssh $user@$host "mkdir -p $path"
-			cp_dependency_accrodingto_metadata
+			wait
 		elif [ $ret == 255 ];then
-			echo "Cp pub key to remote authorized_keys"
+			echo "return 255, Cp pub key to remote authorized_keys"
 			cp_pub_key_to_remote
-			cp_tools_to_remote
+			cp_tools_to_remote &
 		elif [ $ret == 3 ];then
-			echo "Remote: mkdir -p $(dirname $path)/"
+			echo "return 3, Remote: mkdir -p $(dirname $path)/"
 			ssh $user@$host "mkdir -p $(dirname $path)/"
 		elif [ $ret == 20 ];then
-			echo -e "\nInterrupted by Ctrl+C exit..."
+			echo -e "\nreturn 20, Interrupted by Ctrl+C exit..."
 			exit 0
 		elif [ $ret == 23 ];then
-			echo -e "\nrsync error: some files/attrs were not transferred (see previous errors) (code 23)"
+			echo -e "\nreturn 23, rsync error: some files/attrs were not transferred (see previous errors) (code 23)"
 			exit 0
 		else
 			echo "rsync unknown issue ret=$ret"
